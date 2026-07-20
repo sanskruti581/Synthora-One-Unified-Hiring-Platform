@@ -6,7 +6,7 @@ const config: Config = {
     extend: {
       colors: {
         synthora: {
-          bg: "#3B0FD8",
+          bg: "#6F55D9",
           violet: "#8746EB",
           accent: "#FF5DA2",
           button: "#5A22E6",
@@ -24,7 +24,7 @@ const config: Config = {
       },
       backgroundImage: {
         "synthora-radial":
-          "radial-gradient(circle at 74% 20%, rgba(255,93,162,.32), transparent 24%), radial-gradient(circle at 18% 12%, rgba(135,70,235,.58), transparent 34%), radial-gradient(circle at 82% 76%, rgba(255,255,255,.18), transparent 22%), linear-gradient(135deg, #260884 0%, #3B0FD8 42%, #6724DD 76%, #20084F 100%)",
+          "radial-gradient(circle at 74% 20%, rgba(255,140,183,.24), transparent 25%), radial-gradient(circle at 18% 12%, rgba(177,148,245,.42), transparent 34%), radial-gradient(circle at 82% 76%, rgba(255,255,255,.24), transparent 24%), linear-gradient(135deg, #6E61C9 0%, #7F6DE0 42%, #8A63D8 74%, #6456BD 100%)",
       },
       keyframes: {
         float: {

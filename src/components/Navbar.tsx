@@ -25,7 +25,7 @@ export default function Navbar() {
   return (
     <header
       className={`fixed left-0 right-0 top-0 z-50 transition-all duration-300 ${
-        isScrolled ? "bg-[#21085F]/70 shadow-[0_18px_48px_rgba(0,0,0,.18)] backdrop-blur-2xl" : "bg-transparent"
+        isScrolled ? "bg-[#5F50B8]/72 shadow-[0_18px_48px_rgba(48,38,112,.16)] backdrop-blur-2xl" : "bg-transparent"
       }`}
     >
       <nav className="mx-auto flex h-[88px] max-w-[1720px] items-center justify-between px-5 sm:px-8 lg:px-16 xl:px-[140px]">
@@ -77,7 +77,7 @@ export default function Navbar() {
           initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -12 }}
-          className="mx-5 mb-5 rounded-[28px] border border-white/15 bg-[#21085F]/92 p-4 shadow-glass backdrop-blur-2xl lg:hidden"
+          className="mx-5 mb-5 rounded-[28px] border border-white/15 bg-[#5F50B8]/92 p-4 shadow-glass backdrop-blur-2xl lg:hidden"
         >
           <div className="grid gap-1">
             {navItems.map((item) => (
