@@ -1,29 +1,29 @@
 import { ArrowRight, Github, Linkedin, Mail, Twitter } from "lucide-react";
-import logo from "../assets/images/logo.svg";
+import logo from "../../images/logo.png";
 
 const footerLinks = ["Solutions", "Features", "How It Works", "Pricing", "Resources"];
 
 export default function Footer() {
   return (
-    <footer className="px-5 pb-8 sm:px-8 lg:px-16 xl:px-[140px]">
-      <div className="mx-auto max-w-[1440px] rounded-[32px] border border-white/15 bg-white/[.08] p-6 shadow-glass backdrop-blur-2xl sm:p-8 lg:p-10">
+    <footer className="bg-white px-5 pb-8 sm:px-8 lg:px-16 xl:px-[140px]">
+      <div className="mx-auto max-w-[1440px] rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_18px_50px_rgba(15,23,42,.05)] sm:p-8 lg:p-12">
         <div className="grid gap-10 lg:grid-cols-[1.1fr_.9fr] lg:items-center">
           <div>
             <a href="/" className="inline-flex items-center gap-3" aria-label="Synthora.AI home">
               <img src={logo} alt="" className="h-11 w-11" loading="lazy" />
-              <span className="text-2xl font-bold text-white">Synthora.AI</span>
+              <span className="text-2xl font-bold text-[#0F172A]">Synthora.AI</span>
             </a>
-            <p className="mt-5 max-w-xl text-base font-light leading-7 text-white/70">
+            <p className="mt-5 max-w-xl text-base font-normal leading-7 text-[#475569]">
               Premium AI recruitment automation for teams that need faster screening, consistent interviews, and
               trustworthy shortlists.
             </p>
           </div>
 
-          <div id="get-started" className="rounded-[26px] border border-white/15 bg-white/[.08] p-5">
-            <p className="text-2xl font-black leading-tight text-white">Start hiring with AI precision.</p>
+          <div id="get-started" className="text-left lg:text-right">
+            <p className="text-2xl font-black leading-tight text-[#0F172A] sm:text-3xl">Start hiring with AI precision.</p>
             <a
               href="#demo"
-              className="mt-5 inline-flex min-h-[52px] items-center justify-center gap-2 rounded-full bg-white px-6 text-base font-semibold text-[#5A22E6] transition hover:-translate-y-0.5"
+              className="mt-5 inline-flex min-h-[52px] items-center justify-center gap-2 rounded-full bg-[#1E293B] px-6 text-base font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#0F172A]"
             >
               Book a Demo
               <ArrowRight className="h-5 w-5" />
@@ -31,10 +31,14 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="mt-10 flex flex-col gap-6 border-t border-white/10 pt-6 lg:flex-row lg:items-center lg:justify-between">
+        <div className="mt-10 flex flex-col gap-6 border-t border-slate-200 pt-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap gap-x-6 gap-y-3">
             {footerLinks.map((link) => (
-              <a key={link} href={`#${link.toLowerCase().replace(/\s+/g, "-")}`} className="text-sm font-medium text-white/65 hover:text-white">
+              <a
+                key={link}
+                href={`#${link.toLowerCase().replace(/\s+/g, "-")}`}
+                className="text-sm font-semibold text-[#1E293B] transition hover:text-[#0EA5E9]"
+              >
                 {link}
               </a>
             ))}
@@ -45,7 +49,7 @@ export default function Footer() {
                 key={index}
                 href="#resources"
                 aria-label="Synthora.AI social link"
-                className="grid h-10 w-10 place-items-center rounded-full border border-white/15 bg-white/[.08] text-white/70 transition hover:bg-white hover:text-[#5A22E6]"
+                className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 bg-white text-[#475569] transition hover:border-[#0EA5E9] hover:text-[#0EA5E9]"
               >
                 <Icon className="h-4 w-4" />
               </a>
@@ -53,7 +57,9 @@ export default function Footer() {
           </div>
         </div>
 
-        <p className="mt-6 text-sm text-white/45">© 2026 Synthora.AI. All rights reserved.</p>
+        <p className="mt-6 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-[#64748B]">
+          © 2026 Synthora.AI. All rights reserved.
+        </p>
       </div>
     </footer>
   );

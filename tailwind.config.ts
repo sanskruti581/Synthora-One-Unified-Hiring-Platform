@@ -6,25 +6,27 @@ const config: Config = {
     extend: {
       colors: {
         synthora: {
-          bg: "#6F55D9",
-          violet: "#8746EB",
+          bg: "#F8FAFC",
+          navy: "#0F172A",
+          slate: "#475569",
+          blue: "#2563EB",
+          sky: "#38BDF8",
           accent: "#FF5DA2",
-          button: "#5A22E6",
-          rose: "#FF6A95",
-          glass: "rgba(255,255,255,0.08)",
-          border: "rgba(255,255,255,0.15)",
+          rose: "#FB7185",
+          glass: "rgba(255,255,255,0.86)",
+          border: "rgba(148,163,184,0.22)",
         },
       },
       boxShadow: {
-        glass: "0px 30px 60px rgba(0,0,0,.25)",
-        glow: "0 0 60px rgba(255,93,162,.32)",
+        glass: "0px 24px 60px rgba(15,23,42,.10)",
+        glow: "0 24px 70px rgba(37,99,235,.16)",
       },
       fontFamily: {
         inter: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
       },
       backgroundImage: {
         "synthora-radial":
-          "radial-gradient(circle at 74% 20%, rgba(255,140,183,.24), transparent 25%), radial-gradient(circle at 18% 12%, rgba(177,148,245,.42), transparent 34%), radial-gradient(circle at 82% 76%, rgba(255,255,255,.24), transparent 24%), linear-gradient(135deg, #6E61C9 0%, #7F6DE0 42%, #8A63D8 74%, #6456BD 100%)",
+          "radial-gradient(circle at 8% 10%, rgba(56,189,248,.16), transparent 30%), radial-gradient(circle at 90% 8%, rgba(255,93,162,.12), transparent 28%), radial-gradient(circle at 82% 72%, rgba(37,99,235,.08), transparent 26%), linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",
       },
       keyframes: {
         float: {
