@@ -41,11 +41,21 @@ const config: Config = {
           "0%, 100%": { opacity: ".45", transform: "scale(1)" },
           "50%": { opacity: ".9", transform: "scale(1.08)" },
         },
+        marquee: {
+          "0%": { transform: "translateX(0)" },
+          "100%": { transform: "translateX(-50%)" },
+        },
+        softBob: {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-4px)" },
+        },
       },
       animation: {
         float: "float 5.5s ease-in-out infinite",
         drift: "drift 7s ease-in-out infinite",
         "pulse-glow": "pulseGlow 4s ease-in-out infinite",
+        marquee: "marquee 28s linear infinite",
+        "soft-bob": "softBob 4.5s ease-in-out infinite",
       },
     },
   },

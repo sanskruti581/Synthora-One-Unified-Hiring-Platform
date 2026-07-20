@@ -1,5 +1,6 @@
 import Navbar from "../components/Navbar";
 import Hero from "../components/Hero";
+import AssessmentMarquee from "../components/AssessmentMarquee";
 import Stats from "../components/Stats";
 import Features from "../components/Features";
 import HowItWorks from "../components/HowItWorks";
@@ -10,6 +11,7 @@ export default function Home() {
     <main className="min-h-screen overflow-hidden bg-white font-inter">
       <Navbar />
       <Hero />
+      <AssessmentMarquee />
       <Stats />
       <Features />
       <HowItWorks />
