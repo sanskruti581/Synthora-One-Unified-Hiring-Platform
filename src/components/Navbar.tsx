@@ -1,13 +1,21 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, Globe2, Menu, X } from "lucide-react";
+import { ChevronDown, Menu, X } from "lucide-react";
 import { motion } from "framer-motion";
 import logo from "../../images/logo.png";
+
+const useCaseItems = [
+  { label: "Campus Hiring", href: "#solutions" },
+  { label: "Bulk Recruitment Drives", href: "#features" },
+  { label: "Technical Screening", href: "#features" },
+  { label: "HR Interview Automation", href: "#features" },
+  { label: "Final Shortlisting", href: "#how-it-works" },
+];
 
 const navItems = [
   { label: "How It Works", href: "#how-it-works" },
   { label: "AI Agents", href: "#features" },
-  { label: "Solutions", href: "#solutions", hasDropdown: true },
-  { label: "Pricing", href: "#pricing" },
+  { label: "Solutions", href: "#solutions" },
+  { label: "Use Cases", href: "#features", dropdownItems: useCaseItems },
 ];
 
 export default function Navbar() {
@@ -37,38 +45,40 @@ export default function Navbar() {
 
         <div className="hidden items-center justify-center gap-7 lg:flex">
           {navItems.map((item) => (
-            <a
-              key={item.label}
-              href={item.href}
-              className="inline-flex items-center gap-1 text-sm font-medium text-synthora-muted transition hover:text-synthora-blue"
-            >
-              {item.label}
-              {item.hasDropdown ? <ChevronDown size={15} strokeWidth={2.2} /> : null}
-            </a>
+            <div key={item.label} className="group relative">
+              <a
+                href={item.href}
+                className="inline-flex items-center gap-1 text-sm font-medium text-synthora-muted transition hover:text-synthora-blue"
+              >
+                {item.label}
+                {item.dropdownItems ? <ChevronDown size={15} strokeWidth={2.2} /> : null}
+              </a>
+
+              {item.dropdownItems ? (
+                <div className="invisible absolute left-1/2 top-full z-50 w-64 -translate-x-1/2 pt-4 opacity-0 transition group-hover:visible group-hover:opacity-100">
+                  <div className="rounded-2xl border border-synthora-border bg-white p-2 shadow-[0_22px_55px_rgba(15,23,42,.12)]">
+                    {item.dropdownItems.map((dropdownItem) => (
+                      <a
+                        key={dropdownItem.label}
+                        href={dropdownItem.href}
+                        className="block rounded-xl px-4 py-3 text-sm font-medium text-synthora-muted transition hover:bg-blue-50 hover:text-synthora-blue"
+                      >
+                        {dropdownItem.label}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
           ))}
         </div>
 
         <div className="hidden items-center gap-4 lg:flex">
-          <button
-            type="button"
-            className="inline-flex items-center gap-1 text-sm font-medium text-synthora-muted transition hover:text-synthora-text"
-            aria-label="Select language"
-          >
-            <Globe2 size={16} />
-            <span>EN</span>
-            <ChevronDown size={14} strokeWidth={2.2} />
-          </button>
-          <a
-            href="#login"
-            className="text-sm font-medium text-synthora-muted transition hover:text-synthora-text"
-          >
-            Login
-          </a>
           <a
             href="#get-started"
             className="rounded-full bg-synthora-blue px-5 py-2.5 text-sm font-bold text-white shadow-[0_14px_30px_rgba(37,99,235,.24)] transition duration-300 hover:-translate-y-0.5 hover:bg-synthora-blue-hover hover:shadow-[0_18px_38px_rgba(37,99,235,.32)]"
           >
-            Get Started
+            Book a Demo
           </a>
         </div>
 
@@ -92,38 +102,39 @@ export default function Navbar() {
         >
           <div className="grid gap-1">
             {navItems.map((item) => (
-              <a
-                key={item.label}
-                href={item.href}
-                className="flex items-center justify-between rounded-xl px-4 py-3 text-sm font-medium text-synthora-muted transition hover:bg-blue-50 hover:text-synthora-blue"
-                onClick={() => setIsOpen(false)}
-              >
-                <span>{item.label}</span>
-                {item.hasDropdown ? <ChevronDown size={16} strokeWidth={2.2} /> : null}
-              </a>
+              <div key={item.label}>
+                <a
+                  href={item.href}
+                  className="flex items-center justify-between rounded-xl px-4 py-3 text-sm font-medium text-synthora-muted transition hover:bg-blue-50 hover:text-synthora-blue"
+                  onClick={() => setIsOpen(false)}
+                >
+                  <span>{item.label}</span>
+                  {item.dropdownItems ? <ChevronDown size={16} strokeWidth={2.2} /> : null}
+                </a>
+                {item.dropdownItems ? (
+                  <div className="ml-3 grid gap-1 border-l border-synthora-border pl-3">
+                    {item.dropdownItems.map((dropdownItem) => (
+                      <a
+                        key={dropdownItem.label}
+                        href={dropdownItem.href}
+                        className="rounded-xl px-4 py-2.5 text-sm font-medium text-synthora-muted transition hover:bg-blue-50 hover:text-synthora-blue"
+                        onClick={() => setIsOpen(false)}
+                      >
+                        {dropdownItem.label}
+                      </a>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             ))}
           </div>
-          <div className="mt-3 flex items-center justify-between rounded-xl px-4 py-3 text-sm font-medium text-synthora-muted">
-            <span className="inline-flex items-center gap-2">
-              <Globe2 size={16} />
-              EN
-            </span>
-            <ChevronDown size={15} strokeWidth={2.2} />
-          </div>
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <a
-              href="#login"
-              className="rounded-full px-4 py-3 text-center text-sm font-medium text-synthora-muted transition hover:bg-synthora-surface hover:text-synthora-text"
-              onClick={() => setIsOpen(false)}
-            >
-              Login
-            </a>
+          <div className="mt-4 grid gap-3">
             <a
               href="#get-started"
               className="rounded-full bg-synthora-blue px-4 py-3 text-center text-sm font-bold text-white shadow-[0_14px_30px_rgba(37,99,235,.24)] transition hover:bg-synthora-blue-hover"
               onClick={() => setIsOpen(false)}
             >
-              Get Started
+              Book a Demo
             </a>
           </div>
         </motion.div>
