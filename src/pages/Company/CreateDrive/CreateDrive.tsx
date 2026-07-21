@@ -1,10 +1,11 @@
 import { FormEvent, useState } from "react";
+import axios from "axios";
 import { CalendarDays, CheckCircle2, Clock3, FileText, Timer, UploadCloud } from "lucide-react";
 import DashboardLayout from "../../../layouts/DashboardLayout";
 import FormField from "../../../components/FormField";
 import { createHiringDrive } from "../../../services/driveService";
 
-const rounds = ["Aptitude", "Coding", "HR Interview"];
+const rounds = ["Aptitude", "Coding", "HR"];
 
 const initialDrive = {
   driveName: "",
@@ -14,7 +15,7 @@ const initialDrive = {
   examDate: "",
   examTime: "",
   durationMinutes: "",
-  rounds: ["Aptitude", "Coding", "HR Interview"],
+  rounds: ["Aptitude", "Coding", "HR"],
   aptitudeCutoff: "",
   lastRegistrationDate: "",
 };
@@ -45,8 +46,12 @@ export default function CreateDrive() {
       setIsSubmitting(true);
       await createHiringDrive(drive);
       setSuccess(true);
-    } catch {
-      setError("Could not schedule the drive. Please login as a company and make sure the backend is running.");
+    } catch (error) {
+      const message = axios.isAxiosError<{ message?: string }>(error)
+        ? error.response?.data?.message
+        : "";
+
+      setError(message || "Could not schedule the drive. Please login as a company and make sure the backend is running.");
     } finally {
       setIsSubmitting(false);
     }

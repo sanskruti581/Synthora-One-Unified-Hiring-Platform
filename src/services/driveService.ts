@@ -32,17 +32,23 @@ export async function createHiringDrive(payload: HiringDrivePayload) {
     }
   });
 
-  return api.post("/company/drives", formData, {
-    headers: {
-      "Content-Type": "multipart/form-data",
-    },
-  });
+  return api.post("/company/drives", formData);
 }
 
 export type HiringDrive = {
   _id: string;
   driveName: string;
   jobRole: string;
+  jobDescriptionFile?: {
+    originalName?: string;
+    mimeType?: string;
+    size?: number;
+  };
+  studentFile?: {
+    originalName?: string;
+    mimeType?: string;
+    size?: number;
+  };
   examDate: string;
   examTime: string;
   durationMinutes: number;
@@ -51,9 +57,73 @@ export type HiringDrive = {
   lastRegistrationDate: string;
   status: string;
   studentsInvited?: number;
+  studentsLoggedIn?: number;
+  studentsWaiting?: number;
+  studentsStarted?: number;
+  studentsCompleted?: number;
+  averageScore?: number;
+  highestScore?: number;
+  lowestScore?: number;
+  qualifiedStudents?: number;
+  rejectedStudents?: number;
   createdAt: string;
 };
 
 export async function getHiringDrives() {
   return api.get<HiringDrive[]>("/company/drives");
+}
+
+export type DriveStudent = {
+  _id: string;
+  studentName: string;
+  email: string;
+  invitationStatus: string;
+  emailSent: boolean;
+  emailSentStatus: string;
+  deliveryStatus: string;
+  sentTime?: string;
+  assessmentStatus: string;
+  startedAt?: string;
+  completedAt?: string;
+  score?: number | null;
+  result: string;
+};
+
+export type DriveStats = {
+  studentsInvited: number;
+  studentsLoggedIn: number;
+  studentsWaiting?: number;
+  studentsStarted: number;
+  studentsCompleted: number;
+  averageScore: number;
+  highestScore: number;
+  lowestScore: number;
+  qualifiedStudents: number;
+  rejectedStudents: number;
+};
+
+export async function getHiringDriveDetails(driveId: string) {
+  return api.get<{ drive: HiringDrive; stats: DriveStats; students: DriveStudent[] }>(`/company/drives/${driveId}`);
+}
+
+export async function deleteHiringDrive(driveId: string) {
+  return api.delete(`/company/drives/${driveId}`);
+}
+
+export async function sendReminderEmails(driveId: string) {
+  return api.post<{ message: string; sent: number; failed: number; total: number }>(`/company/drives/${driveId}/reminders`);
+}
+
+export async function downloadDriveFile(driveId: string, type: "jd" | "students-file" | "qualified" | "results" | "report", filename: string) {
+  const response = await api.get<Blob>(`/company/drives/${driveId}/download/${type}`, {
+    responseType: "blob",
+  });
+  const url = window.URL.createObjectURL(response.data);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
 }

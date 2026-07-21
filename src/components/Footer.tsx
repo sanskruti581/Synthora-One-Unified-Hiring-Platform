@@ -1,4 +1,5 @@
 import { ArrowRight, Github, Linkedin, Mail, Twitter } from "lucide-react";
+import { Link } from "react-router-dom";
 import logo from "../../images/logo.png";
 
 const footerLinks = ["Solutions", "Features", "How It Works", "Pricing", "Resources"];
@@ -21,13 +22,13 @@ export default function Footer() {
 
           <div id="get-started" className="text-left lg:text-right">
             <p className="text-2xl font-black leading-tight text-synthora-text sm:text-3xl">Start hiring with AI precision.</p>
-            <a
-              href="#demo"
+            <Link
+              to="/assessment-demo"
               className="mt-5 inline-flex min-h-[52px] items-center justify-center gap-2 rounded-full bg-synthora-blue px-6 text-base font-bold text-white shadow-[0_14px_30px_rgba(37,99,235,.24)] transition hover:-translate-y-0.5 hover:bg-synthora-blue-hover"
             >
               Book a Demo
               <ArrowRight className="h-5 w-5" />
-            </a>
+            </Link>
           </div>
         </div>
 

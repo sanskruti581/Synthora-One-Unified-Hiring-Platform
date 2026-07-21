@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, CalendarClock, CheckCircle2, FileSpreadsheet, Send, Sparkles, UsersRound } from "lucide-react";
+import { ArrowUpRight, CalendarClock, CheckCircle2, FileSpreadsheet, Send, Sparkles, Trash2, UsersRound } from "lucide-react";
 import { motion } from "framer-motion";
 import DashboardLayout from "../../../layouts/DashboardLayout";
-import { getHiringDrives, type HiringDrive } from "../../../services/driveService";
+import { deleteHiringDrive, getHiringDrives, type HiringDrive } from "../../../services/driveService";
 
 export default function CompanyDashboard() {
   const [drives, setDrives] = useState<HiringDrive[]>([]);
@@ -14,6 +14,11 @@ export default function CompanyDashboard() {
       .catch(() => setDrives([]));
   }, []);
 
+  const handleDelete = async (driveId: string) => {
+    await deleteHiringDrive(driveId);
+    setDrives((current) => current.filter((drive) => drive._id !== driveId));
+  };
+
   const totalStudentsInvited = useMemo(
     () => drives.reduce((total, drive) => total + (drive.studentsInvited ?? 0), 0),
     [drives],
@@ -22,7 +27,7 @@ export default function CompanyDashboard() {
   const stats = [
     { label: "Total Drives", value: String(drives.length), icon: CalendarClock, accent: "bg-sky-100 text-sky-700 dark:bg-sky-400/15 dark:text-sky-200" },
     { label: "Students Invited", value: String(totalStudentsInvited), icon: Send, accent: "bg-violet-100 text-violet-700 dark:bg-violet-400/15 dark:text-violet-200" },
-    { label: "Completed Assessments", value: "0", icon: CheckCircle2, accent: "bg-emerald-100 text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-200" },
+    { label: "Waiting Students", value: String(drives.reduce((total, drive) => total + (drive.studentsWaiting ?? 0), 0)), icon: CheckCircle2, accent: "bg-emerald-100 text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-200" },
     { label: "Shortlisted Students", value: "0", icon: UsersRound, accent: "bg-rose-100 text-rose-700 dark:bg-rose-400/15 dark:text-rose-200" },
   ];
 
@@ -59,25 +64,40 @@ export default function CompanyDashboard() {
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/10">
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
             <div>
-              <h2 className="text-lg font-extrabold text-slate-950 dark:text-white">Previous Drives</h2>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Recent company hiring activity.</p>
+              <h2 className="text-lg font-extrabold text-slate-950 dark:text-white">Hiring Drives</h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Create and view company hiring drives.</p>
             </div>
             <Link to="/company/create-drive" className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-950 px-4 text-sm font-bold text-white transition hover:bg-slate-800 dark:bg-sky-400 dark:text-slate-950">
               Create Hiring Drive
             </Link>
           </div>
 
-          <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 dark:border-white/10">
+          <div className="mt-5 grid gap-4">
             {drives.length ? drives.map((drive) => (
-              <div key={drive._id} className="grid gap-3 border-b border-slate-200 p-4 last:border-b-0 dark:border-white/10 sm:grid-cols-[1fr_130px_110px_110px] sm:items-center">
+              <article key={drive._id} className="rounded-2xl border border-slate-200 p-4 dark:border-white/10">
                 <div>
-                  <p className="font-bold text-slate-900 dark:text-white">{drive.jobRole}</p>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">{drive.driveName}</p>
+                  <p className="font-bold text-slate-900 dark:text-white">{drive.driveName}</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">{drive.jobRole}</p>
                 </div>
-                <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">{drive.examDate}</p>
-                <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">{drive.studentsInvited ?? 0} invited</p>
-                <span className="w-fit rounded-full bg-slate-100 px-3 py-1 text-xs font-extrabold capitalize text-slate-700 dark:bg-white/10 dark:text-slate-200">{drive.status}</span>
-              </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <DriveFact label="Status" value={drive.status} />
+                  <DriveFact label="Exam Date" value={drive.examDate} />
+                  <DriveFact label="Students Invited" value={String(drive.studentsInvited ?? 0)} />
+                </div>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <Link to={`/company/drives/${drive._id}`} className="inline-flex h-10 items-center justify-center rounded-xl bg-slate-950 px-4 text-sm font-bold text-white transition hover:bg-slate-800 dark:bg-sky-400 dark:text-slate-950">
+                    View Details
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(drive._id)}
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-rose-200 px-4 text-sm font-bold text-rose-600 transition hover:bg-rose-50 dark:border-rose-400/20 dark:hover:bg-rose-400/10"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete
+                  </button>
+                </div>
+              </article>
             )) : (
               <div className="p-6 text-sm font-semibold text-slate-500 dark:text-slate-400">
                 No hiring drives created yet.
@@ -99,5 +119,14 @@ export default function CompanyDashboard() {
         </section>
       </div>
     </DashboardLayout>
+  );
+}
+
+function DriveFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-slate-50 p-3 dark:bg-white/5">
+      <p className="text-xs font-extrabold uppercase text-slate-500 dark:text-slate-400">{label}</p>
+      <p className="mt-1 text-sm font-bold text-slate-900 dark:text-white">{value}</p>
+    </div>
   );
 }
