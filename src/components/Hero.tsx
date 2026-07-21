@@ -1,13 +1,8 @@
 import { CalendarCheck } from "lucide-react";
 import { motion } from "framer-motion";
-<<<<<<< HEAD
 import dashboardGirl from "../../images/Dashboard_girl2.png";
-78
-=======
-import { Link } from "react-router-dom";
-import dashboardGirl from "../../images/Dashboard_girl.png";
 
->>>>>>> f5ba8cfbd6c4c6102ec58b8050ed5141d29cf9b7
+import { Link } from "react-router-dom";
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
   visible: { opacity: 1, y: 0 },
