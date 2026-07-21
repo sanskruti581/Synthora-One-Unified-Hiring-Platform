@@ -36,7 +36,7 @@ const steps = [
 
 export default function HowItWorks() {
   return (
-    <section id="how-it-works" className="px-5 pb-24 sm:px-8 lg:px-16 xl:px-[140px]">
+    <section id="how-it-works" className="bg-transparent px-5 pb-24 sm:px-8 lg:px-16 xl:px-[140px]">
       <div className="mx-auto max-w-[1440px]">
         <motion.div
           initial={{ opacity: 0, y: 24 }}
@@ -45,13 +45,13 @@ export default function HowItWorks() {
           transition={{ duration: 0.6 }}
           className="max-w-3xl"
         >
-          <p className="text-sm font-extrabold uppercase tracking-[.16em] text-[#FF9FC2]">How it works</p>
-          <h2 className="mt-4 text-balance text-4xl font-black leading-[1.06] tracking-normal text-white sm:text-5xl lg:text-[56px]">
+          <p className="text-sm font-extrabold uppercase tracking-[.18em] text-synthora-cyan">How it works</p>
+          <h2 className="mt-4 text-balance text-4xl font-black leading-[1.08] tracking-normal text-synthora-text sm:text-5xl lg:text-[56px]">
             Simple Steps. Smarter Hiring.
           </h2>
         </motion.div>
 
-        <div className="mt-12 grid gap-5 lg:grid-cols-5">
+        <div className="mt-12 grid gap-6 lg:grid-cols-5">
           {steps.map(({ number, title, description, icon: Icon }, index) => (
             <motion.article
               key={title}
@@ -59,19 +59,19 @@ export default function HowItWorks() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, amount: 0.25 }}
               transition={{ duration: 0.55, delay: index * 0.06 }}
-              className="relative min-h-[230px] rounded-[28px] border border-white/15 bg-white/[.08] p-6 shadow-glass backdrop-blur-2xl"
+              className="relative min-h-[240px] rounded-xl border border-synthora-border bg-white p-6 shadow-[0_16px_36px_rgba(15,23,42,.04)]"
             >
               <div className="flex items-center justify-between gap-4">
-                <span className="text-2xl font-black text-white/35">{number}</span>
-                <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white text-[#5A22E6]">
+                <span className="text-2xl font-black text-synthora-blue">{number}</span>
+                <div className="grid h-12 w-12 place-items-center rounded-xl bg-cyan-50 text-synthora-cyan">
                   <Icon className="h-6 w-6" />
                 </div>
               </div>
-              <h3 className="mt-8 text-xl font-bold leading-tight text-white">{title}</h3>
-              <p className="mt-3 text-sm font-light leading-7 text-white/70">{description}</p>
+              <h3 className="mt-8 text-xl font-bold leading-tight text-synthora-text">{title}</h3>
+              <p className="mt-3 text-sm font-normal leading-7 text-synthora-muted">{description}</p>
               {index < steps.length - 1 ? (
-                <span className="absolute -right-3 top-1/2 hidden h-6 w-6 -translate-y-1/2 rounded-full border border-white/15 bg-white/10 text-center text-white/80 backdrop-blur lg:block">
-                  →
+                <span className="absolute -right-5 top-1/2 hidden -translate-y-1/2 text-2xl font-semibold leading-none text-slate-300 lg:block">
+                  {"->"}
                 </span>
               ) : null}
             </motion.article>

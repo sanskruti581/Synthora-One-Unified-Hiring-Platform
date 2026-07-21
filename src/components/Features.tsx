@@ -31,7 +31,7 @@ const features = [
 
 export default function Features() {
   return (
-    <section id="features" className="px-5 pb-24 sm:px-8 lg:px-16 xl:px-[140px]">
+    <section id="features" className="bg-transparent px-5 pb-24 sm:px-8 lg:px-16 xl:px-[140px]">
       <div className="mx-auto max-w-[1440px]">
         <motion.div
           initial={{ opacity: 0, y: 24 }}
@@ -40,8 +40,8 @@ export default function Features() {
           transition={{ duration: 0.6 }}
           className="mx-auto max-w-3xl text-center"
         >
-          <p className="text-sm font-extrabold uppercase tracking-[.16em] text-[#FF9FC2]">Features</p>
-          <h2 className="mt-4 text-balance text-4xl font-black leading-[1.06] tracking-normal text-white sm:text-5xl lg:text-[56px]">
+          <p className="text-sm font-extrabold uppercase tracking-[.18em] text-synthora-blue">Features</p>
+          <h2 className="mt-4 text-balance text-4xl font-black leading-[1.08] tracking-normal text-synthora-text sm:text-5xl lg:text-[56px]">
             Built for faster decisions and stronger hiring signals.
           </h2>
         </motion.div>
@@ -55,13 +55,13 @@ export default function Features() {
               viewport={{ once: true, amount: 0.25 }}
               transition={{ duration: 0.55, delay: index * 0.06 }}
               whileHover={{ y: -10 }}
-              className="group min-h-[248px] rounded-[28px] border border-white/15 bg-white/[.08] p-6 shadow-glass backdrop-blur-2xl transition hover:border-[#FF5DA2]/45 hover:shadow-[0_28px_70px_rgba(255,93,162,.22)]"
+              className="group min-h-[270px] rounded-xl border border-synthora-border bg-white p-6 transition hover:border-synthora-cyan hover:shadow-[0_18px_40px_rgba(15,23,42,.06)] xl:p-8"
             >
-              <div className="grid h-14 w-14 place-items-center rounded-2xl bg-white text-[#5A22E6] shadow-[0_18px_42px_rgba(255,255,255,.18)] transition group-hover:scale-105">
+              <div className="grid h-14 w-14 place-items-center rounded-xl bg-blue-50 text-synthora-blue transition group-hover:scale-105 group-hover:bg-cyan-50 group-hover:text-synthora-cyan">
                 <Icon className="h-7 w-7" />
               </div>
-              <h3 className="mt-6 text-xl font-bold leading-tight text-white">{title}</h3>
-              <p className="mt-3 text-sm font-light leading-7 text-white/70">{description}</p>
+              <h3 className="mt-7 text-xl font-bold leading-tight text-synthora-text">{title}</h3>
+              <p className="mt-3 text-sm font-normal leading-7 text-synthora-muted">{description}</p>
             </motion.article>
           ))}
         </div>
