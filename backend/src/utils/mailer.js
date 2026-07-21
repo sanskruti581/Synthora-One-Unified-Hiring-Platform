@@ -4,7 +4,17 @@ function hasSmtpConfig() {
   return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
 }
 
-export async function sendStudentInvitationEmail({ to, studentName, companyName, driveName, examDate, examTime, password, activationLink }) {
+export async function sendStudentInvitationEmail({
+  to,
+  studentName,
+  companyName,
+  driveName,
+  jobRole,
+  examDate,
+  examTime,
+  durationMinutes,
+  activationLink,
+}) {
   if (!hasSmtpConfig()) {
     return { status: "smtp_not_configured" };
   }
@@ -22,17 +32,22 @@ export async function sendStudentInvitationEmail({ to, studentName, companyName,
   await transporter.sendMail({
     from: process.env.MAIL_FROM || process.env.SMTP_USER,
     to,
-    subject: `${companyName} hiring drive invitation - ${driveName}`,
+    subject: `Invitation for Aptitude Assessment - ${companyName}`,
     html: `
       <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
-        <h2>Synthora Assessment Invitation</h2>
-        <p>Hello ${studentName || "Student"},</p>
-        <p>You are invited for <strong>${driveName}</strong> by <strong>${companyName}</strong>.</p>
-        <p><strong>Exam Date:</strong> ${examDate}<br/><strong>Exam Time:</strong> ${examTime}</p>
-        <p>Your login details:</p>
-        <p><strong>Email:</strong> ${to}<br/><strong>Password:</strong> ${password}</p>
-        <p>Your unique activation link opens 10 minutes before the exam:</p>
+        <p>Dear ${studentName || "Student"},</p>
+        <p>You have been invited to participate in the recruitment process.</p>
+        <p><strong>Company</strong><br/>${companyName}</p>
+        <p><strong>Job Role</strong><br/>${jobRole}</p>
+        <p><strong>Hiring Drive</strong><br/>${driveName}</p>
+        <p><strong>Round</strong><br/>Aptitude Assessment</p>
+        <p><strong>Exam Date</strong><br/>${examDate}</p>
+        <p><strong>Exam Time</strong><br/>${examTime}</p>
+        <p><strong>Duration</strong><br/>${durationMinutes} minutes</p>
+        <p>Please use your unique invitation link below.</p>
         <p><a href="${activationLink}">${activationLink}</a></p>
+        <p>This invitation is personal.<br/>Do not share this link.</p>
+        <p>Regards<br/>Synthora AI Recruitment Platform</p>
       </div>
     `,
   });

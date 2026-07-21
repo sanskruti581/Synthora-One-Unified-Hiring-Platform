@@ -1,13 +1,30 @@
 import readXlsxFile from "read-excel-file/node";
 import { parse as parseCsv } from "csv-parse/sync";
 
-const emailKeys = ["email", "mail", "email id", "email address", "student email"];
-const nameKeys = ["name", "student name", "full name"];
-const phoneKeys = ["phone", "mobile", "phone number", "contact"];
+const emailKeys = ["email", "mail", "emailid", "emailaddress", "studentemail", "studentmail"];
+const nameKeys = ["name", "studentname", "fullname"];
+const phoneKeys = ["phone", "mobile", "phonenumber", "contact", "contactnumber"];
+const emailPattern = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+
+function normalizeKey(key) {
+  return String(key ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function extractEmail(value) {
+  const match = String(value ?? "").match(emailPattern);
+  return match ? match[0].toLowerCase() : "";
+}
 
 function pickValue(row, keys) {
   const normalizedRow = Object.fromEntries(
-    Object.entries(row).map(([key, value]) => [key.trim().toLowerCase(), value]),
+    Object.entries(row).map(([key, value]) => [normalizeKey(key), value]),
   );
 
   const matchedKey = keys.find((key) => normalizedRow[key] !== undefined);
@@ -28,22 +45,67 @@ function rowsFromTable(table) {
     throw new Error("Student file header row is invalid. Please check the uploaded spreadsheet format.");
   }
 
-  const headers = headerRow.map((header) => String(header).trim());
+  const headers = headerRow.map((header) => String(header ?? "").trim());
 
   return dataRows.map((row) =>
     Object.fromEntries(headers.map((header, index) => [header, Array.isArray(row) ? (row[index] ?? "") : ""])),
   );
 }
 
+function studentsFromRows(rows) {
+  return rows.flatMap((row) => {
+    const pickedEmail = pickValue(row, emailKeys).toLowerCase();
+    const email = isValidEmail(pickedEmail) ? pickedEmail : extractEmail(Object.values(row).join(" "));
+
+    if (!isValidEmail(email)) {
+      return [];
+    }
+
+    return [{
+      name: pickValue(row, nameKeys),
+      email,
+      phone: pickValue(row, phoneKeys),
+    }];
+  });
+}
+
+function studentsFromRawValues(rawRows) {
+  const students = [];
+
+  for (const row of rawRows) {
+    const values = Array.isArray(row)
+      ? row.map((value) => String(value ?? "").trim())
+      : Object.values(row).map((value) => String(value ?? "").trim());
+    const emailIndex = values.findIndex((value) => extractEmail(value));
+
+    if (emailIndex === -1) {
+      continue;
+    }
+
+    const email = extractEmail(values[emailIndex]);
+    const sameCellName = values[emailIndex].replace(emailPattern, "").replace(/[-_:|,;]/g, " ").trim();
+    const adjacentName = values.find((value, index) => index !== emailIndex && value && !extractEmail(value)) || "";
+    const name = adjacentName || sameCellName;
+
+    students.push({
+      name,
+      email,
+      phone: "",
+    });
+  }
+
+  return students;
+}
+
 export async function parseStudentFile(buffer, filename = "") {
   const isCsv = filename.toLowerCase().endsWith(".csv");
-  const rows = isCsv ? parseCsv(buffer, { columns: true, skip_empty_lines: true, trim: true }) : rowsFromTable(await readXlsxFile(buffer));
+  const table = isCsv ? null : await readXlsxFile(buffer);
+  const rows = isCsv ? parseCsv(buffer, { columns: true, skip_empty_lines: true, trim: true }) : rowsFromTable(table);
+  const students = studentsFromRows(rows);
 
-  return rows
-    .map((row) => ({
-      name: pickValue(row, nameKeys),
-      email: pickValue(row, emailKeys).toLowerCase(),
-      phone: pickValue(row, phoneKeys),
-    }))
-    .filter((student) => student.email.includes("@"));
+  if (students.length > 0) {
+    return students;
+  }
+
+  return isCsv ? studentsFromRawValues(rows) : studentsFromRawValues(table);
 }

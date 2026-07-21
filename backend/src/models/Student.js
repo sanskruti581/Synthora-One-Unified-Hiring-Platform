@@ -11,6 +11,26 @@ const studentSchema = new mongoose.Schema(
     plainPasswordForInitialEmail: { type: String, required: true },
     isActive: { type: Boolean, default: false },
     activatedAt: { type: Date },
+    assessmentStatus: {
+      type: String,
+      enum: ["Pending", "Logged In", "Started", "Completed"],
+      default: "Pending",
+    },
+    lastLogin: Date,
+    startedAt: Date,
+    completedAt: Date,
+    currentRound: { type: String, default: "Aptitude" },
+    answers: {
+      type: Map,
+      of: String,
+      default: {},
+    },
+    score: { type: Number, default: null },
+    result: {
+      type: String,
+      enum: ["Pending", "Qualified", "Rejected"],
+      default: "Pending",
+    },
   },
   { timestamps: true },
 );

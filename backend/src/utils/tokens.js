@@ -1,7 +1,7 @@
 import crypto from "crypto";
 
 export function createInvitationToken() {
-  return crypto.randomBytes(32).toString("hex");
+  return crypto.randomUUID();
 }
 
 export function createStudentPassword() {

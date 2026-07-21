@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import Company from "../models/Company.js";
 import Student from "../models/Student.js";
 import HiringDrive from "../models/HiringDrive.js";
+import Invitation from "../models/Invitation.js";
 import { getExamStartDate } from "../utils/tokens.js";
 
 const router = Router();
@@ -38,6 +39,12 @@ router.post("/login", async (req, res) => {
       if (!student.isActive || Date.now() < loginOpenAt.getTime()) {
         return res.status(403).json({ message: "Student login opens 10 minutes before exam time" });
       }
+
+      await Student.findByIdAndUpdate(student._id, { assessmentStatus: "Logged In", lastLogin: new Date() });
+      await Invitation.findOneAndUpdate(
+        { student: student._id, drive: student.drive },
+        { assessmentStatus: "Logged In", lastLogin: new Date() },
+      );
 
       const token = jwt.sign({ id: student._id, userType: "student" }, process.env.JWT_SECRET || "dev-secret", { expiresIn: "1d" });
       return res.json({ userType: "student", token });
