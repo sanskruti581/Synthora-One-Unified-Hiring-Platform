@@ -29,7 +29,7 @@ The problem it solves is repetitive, inconsistent, and time-heavy hiring workflo
 - No Prisma, Supabase, Firebase, MongoDB, PostgreSQL, or SQL configuration found.
 
 ### State Management
-
+d
 - Local React state only.
 - Example: navbar uses `useState` for mobile menu and scroll state.
 - No Redux, Zustand, Context state layer, or server cache library.
