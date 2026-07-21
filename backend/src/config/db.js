@@ -5,6 +5,8 @@ export async function connectDatabase() {
     throw new Error("MONGO_URI is missing. Add it to backend/.env or project .env.");
   }
 
-  await mongoose.connect(process.env.MONGO_URI);
+  await mongoose.connect(process.env.MONGO_URI, {
+    serverSelectionTimeoutMS: 10000,
+  });
   console.log("MongoDB connected");
 }

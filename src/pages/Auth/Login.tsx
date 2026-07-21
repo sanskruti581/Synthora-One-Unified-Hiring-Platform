@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import axios from "axios";
 import { Lock, Mail } from "lucide-react";
 import AuthLayout from "../../layouts/AuthLayout";
 import FormField from "../../components/FormField";
@@ -26,8 +27,12 @@ export default function Login() {
       }
 
       navigate(userType === "student" ? "/student/dashboard" : "/company/dashboard");
-    } catch {
-      setError("Login failed. Student login opens only after invitation activation and 10 minutes before the exam.");
+    } catch (error) {
+      const message = axios.isAxiosError<{ message?: string }>(error)
+        ? error.response?.data?.message
+        : "";
+
+      setError(message || "Login failed. Student login opens only after invitation activation and 10 minutes before the exam.");
     } finally {
       setIsSubmitting(false);
     }

@@ -4,38 +4,38 @@ const assessmentTypes = [
   {
     label: "Aptitude Tests",
     icon: Brain,
-    accent: "text-cyan-300",
-    glow: "shadow-cyan-500/20",
+    accent: "text-synthora-cyan",
+    glow: "shadow-[0_14px_30px_rgba(0,163,255,.14)]",
   },
   {
     label: "Technical Interviews",
     icon: Code2,
-    accent: "text-blue-400",
-    glow: "shadow-blue-500/20",
+    accent: "text-synthora-blue",
+    glow: "shadow-[0_14px_30px_rgba(37,99,235,.14)]",
   },
   {
     label: "Coding Rounds",
     icon: Braces,
-    accent: "text-emerald-300",
-    glow: "shadow-emerald-500/20",
+    accent: "text-synthora-cyan",
+    glow: "shadow-[0_14px_30px_rgba(6,182,212,.14)]",
   },
   {
     label: "HR Conversations",
     icon: MessageSquare,
-    accent: "text-rose-300",
-    glow: "shadow-rose-500/20",
+    accent: "text-synthora-blue",
+    glow: "shadow-[0_14px_30px_rgba(37,99,235,.14)]",
   },
   {
     label: "Psychometric Tests",
     icon: Activity,
-    accent: "text-amber-300",
-    glow: "shadow-amber-500/20",
+    accent: "text-synthora-amber",
+    glow: "shadow-[0_14px_30px_rgba(245,158,11,.16)]",
   },
   {
     label: "System Design Exams",
     icon: GitFork,
-    accent: "text-violet-300",
-    glow: "shadow-violet-500/20",
+    accent: "text-synthora-cyan",
+    glow: "shadow-[0_14px_30px_rgba(0,163,255,.14)]",
   },
 ];
 
@@ -43,9 +43,9 @@ const marqueeItems = [...assessmentTypes, ...assessmentTypes];
 
 export default function AssessmentMarquee() {
   return (
-    <section className="w-full bg-[#121212] py-8 text-white">
+    <section className="w-full bg-synthora-surface py-8 text-synthora-text">
       <div className="mx-auto max-w-7xl px-6">
-        <p className="mb-6 text-center text-xs font-semibold uppercase tracking-[0.22em] text-zinc-500">
+        <p className="mb-6 text-center text-xs font-semibold uppercase tracking-[0.22em] text-synthora-muted">
           Supported Assessment Types
         </p>
 
@@ -54,13 +54,13 @@ export default function AssessmentMarquee() {
             {marqueeItems.map(({ label, icon: Icon, accent, glow }, index) => (
               <div
                 key={`${label}-${index}`}
-                className={`flex animate-soft-bob items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.06] px-5 py-4 shadow-lg ${glow} backdrop-blur transition duration-300 hover:-translate-y-1 hover:border-white/20 hover:bg-white/[0.1]`}
+                className={`flex animate-soft-bob items-center gap-3 rounded-xl border border-synthora-border bg-white px-5 py-4 ${glow} transition duration-300 hover:-translate-y-1 hover:border-synthora-cyan hover:bg-blue-50`}
                 style={{ animationDelay: `${(index % assessmentTypes.length) * 120}ms` }}
               >
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.08]">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50">
                   <Icon className={`h-5 w-5 ${accent}`} strokeWidth={2.2} />
                 </span>
-                <span className="whitespace-nowrap text-base font-bold tracking-tight text-zinc-100">
+                <span className="whitespace-nowrap text-base font-bold tracking-tight text-synthora-text">
                   {label}
                 </span>
               </div>

@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import axios from "axios";
 import { Building2, Globe2, Lock, Mail, Phone, UserRound } from "lucide-react";
 import AuthLayout from "../../layouts/AuthLayout";
 import FormField from "../../components/FormField";
@@ -39,8 +40,12 @@ export default function CompanyRegister() {
       setIsSubmitting(true);
       await registerCompany(form);
       navigate("/company/login");
-    } catch {
-      setError("Registration failed. Please check the details and try again.");
+    } catch (error) {
+      const message = axios.isAxiosError<{ message?: string }>(error)
+        ? error.response?.data?.message
+        : "";
+
+      setError(message || "Registration failed because the backend or database is not reachable. Please start the backend and check MongoDB Atlas access.");
     } finally {
       setIsSubmitting(false);
     }
