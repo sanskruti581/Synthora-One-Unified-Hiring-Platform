@@ -1,7 +1,7 @@
 import { CalendarCheck } from "lucide-react";
 import { motion } from "framer-motion";
-import dashboardGirl from "../../images/Dashboard_girl.png";
-
+import dashboardGirl from "../../images/Dashboard_girl2.png";
+78
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
   visible: { opacity: 1, y: 0 },
