@@ -27,7 +27,9 @@ function HeroDashboardImage() {
 
 export default function Hero() {
   return (
-    <section className="relative overflow-hidden bg-white py-20 md:py-28" id="solutions">
+    <section className="relative overflow-hidden bg-transparent py-20 md:py-28" id="solutions">
+      <div className="pointer-events-none absolute -right-28 top-16 h-72 w-72 rounded-full bg-synthora-cyan/15 blur-3xl" />
+      <div className="pointer-events-none absolute left-8 top-24 h-52 w-52 rounded-full bg-synthora-blue/10 blur-3xl" />
       <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 px-6 md:grid-cols-2 lg:gap-16">
         <motion.div
           initial="hidden"
@@ -37,7 +39,7 @@ export default function Hero() {
         >
           <motion.div
             variants={fadeUp}
-            className="mb-6 inline-flex w-fit items-center gap-2 rounded-full border border-sky-100 bg-sky-50 px-4 py-2.5 text-xs font-extrabold uppercase text-[#0EA5E9] shadow-[0_12px_30px_rgba(14,165,233,.08)]"
+            className="mb-6 inline-flex w-fit items-center gap-2 rounded-full border border-synthora-border bg-white px-4 py-2.5 text-xs font-extrabold uppercase text-synthora-cyan shadow-[0_12px_30px_rgba(0,163,255,.10)]"
           >
             <CalendarCheck className="h-4 w-4" />
             AI-Powered Recruitment Platform
@@ -45,14 +47,14 @@ export default function Hero() {
 
           <motion.h1
             variants={fadeUp}
-            className="mb-6 text-4xl font-extrabold leading-[1.15] tracking-tight text-slate-900 md:text-5xl lg:text-6xl"
+            className="mb-6 text-4xl font-extrabold leading-[1.15] tracking-tight text-synthora-text md:text-5xl lg:text-6xl"
           >
             <span className="block">Hire Smarter.</span>
-            <span className="block text-blue-600">Interview Faster.</span>
+            <span className="block text-synthora-blue">Interview Faster.</span>
             <span className="block">Choose With Confidence.</span>
           </motion.h1>
 
-          <motion.p variants={fadeUp} className="mb-8 max-w-xl text-lg leading-relaxed text-slate-600">
+          <motion.p variants={fadeUp} className="mb-8 max-w-xl text-lg leading-relaxed text-synthora-muted">
             Synthora.AI streamlines aptitude tests, technical interviews, coding rounds, and HR conversations so teams
             can identify stronger candidates with clarity and speed.
           </motion.p>
@@ -60,13 +62,13 @@ export default function Hero() {
           <motion.div variants={fadeUp} className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <a
               href="#get-started"
-              className="inline-flex items-center justify-center rounded-xl bg-slate-950 px-6 py-3 font-medium text-white transition hover:bg-slate-800"
+              className="inline-flex items-center justify-center rounded-xl bg-synthora-blue px-6 py-3 font-medium text-white shadow-[0_14px_30px_rgba(37,99,235,.24)] transition hover:bg-synthora-blue-hover"
             >
               Get Started Free
             </a>
             <a
               href="#demo"
-              className="inline-flex items-center justify-center rounded-xl bg-slate-100 px-6 py-3 font-medium text-slate-700 transition hover:bg-slate-200 sm:ml-4"
+              className="inline-flex items-center justify-center rounded-xl border border-synthora-border bg-white px-6 py-3 font-medium text-synthora-text transition hover:border-synthora-cyan hover:text-synthora-blue sm:ml-4"
             >
               Watch Demo
             </a>

@@ -1,14 +1,13 @@
 import { useEffect, useState } from "react";
-import { Menu, X } from "lucide-react";
+import { ChevronDown, Globe2, Menu, X } from "lucide-react";
 import { motion } from "framer-motion";
 import logo from "../../images/logo.png";
 
 const navItems = [
-  { label: "Solutions", href: "#solutions" },
-  { label: "Features", href: "#features" },
   { label: "How It Works", href: "#how-it-works" },
+  { label: "AI Agents", href: "#features" },
+  { label: "Solutions", href: "#solutions", hasDropdown: true },
   { label: "Pricing", href: "#pricing" },
-  { label: "Resources", href: "#resources" },
 ];
 
 export default function Navbar() {
@@ -24,38 +23,50 @@ export default function Navbar() {
 
   return (
     <header
-      className={`fixed left-0 right-0 top-0 z-50 transition-all duration-300 ${
-        isScrolled ? "border-b border-slate-200/70 bg-white/95 shadow-[0_18px_48px_rgba(15,23,42,.06)] backdrop-blur-2xl" : "bg-white/70 backdrop-blur-sm"
-      }`}
+      className="pointer-events-none fixed left-0 right-0 top-0 z-50 px-3 pt-4 sm:px-5"
     >
-      <nav className="mx-auto flex h-[88px] max-w-[1720px] items-center justify-between px-5 sm:px-8 lg:px-16 xl:px-[140px]">
-        <a href="/" className="flex items-center gap-3" aria-label="Synthora.AI home">
-          <img src={logo} alt="" className="h-11 w-11" loading="eager" />
-          <span className="text-xl font-bold tracking-normal text-[#0F172A] sm:text-2xl">Synthora.AI</span>
+      <nav
+        className={`pointer-events-auto mx-auto flex h-16 max-w-6xl items-center justify-between rounded-full border border-synthora-border bg-white px-4 py-2.5 shadow-[0_18px_45px_rgba(15,23,42,.08)] transition-all duration-300 sm:px-5 lg:px-6 ${
+          isScrolled ? "shadow-[0_20px_55px_rgba(15,23,42,.12)]" : ""
+        }`}
+      >
+        <a href="/" className="flex min-w-0 items-center gap-2" aria-label="Synthora.AI home">
+          <img src={logo} alt="" className="h-10 w-10 shrink-0" loading="eager" />
+          <span className="truncate text-lg font-bold tracking-normal text-synthora-text sm:text-xl">Synthora.AI</span>
         </a>
 
-        <div className="hidden items-center gap-8 lg:flex">
+        <div className="hidden items-center justify-center gap-7 lg:flex">
           {navItems.map((item) => (
             <a
               key={item.label}
               href={item.href}
-              className="text-sm font-semibold text-[#1E293B] transition hover:text-[#0EA5E9] xl:text-base"
+              className="inline-flex items-center gap-1 text-sm font-medium text-synthora-muted transition hover:text-synthora-blue"
             >
               {item.label}
+              {item.hasDropdown ? <ChevronDown size={15} strokeWidth={2.2} /> : null}
             </a>
           ))}
         </div>
 
-        <div className="hidden items-center gap-3 lg:flex">
+        <div className="hidden items-center gap-4 lg:flex">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-sm font-medium text-synthora-muted transition hover:text-synthora-text"
+            aria-label="Select language"
+          >
+            <Globe2 size={16} />
+            <span>EN</span>
+            <ChevronDown size={14} strokeWidth={2.2} />
+          </button>
           <a
             href="#login"
-            className="rounded-full border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-[#1E293B] transition hover:border-[#0EA5E9] hover:text-[#0EA5E9]"
+            className="text-sm font-medium text-synthora-muted transition hover:text-synthora-text"
           >
             Login
           </a>
           <a
             href="#get-started"
-            className="rounded-full bg-[#1E293B] px-6 py-3 text-sm font-bold text-white shadow-[0_18px_42px_rgba(30,41,59,.18)] transition hover:-translate-y-0.5 hover:bg-[#0F172A]"
+            className="rounded-full bg-synthora-blue px-5 py-2.5 text-sm font-bold text-white shadow-[0_14px_30px_rgba(37,99,235,.24)] transition duration-300 hover:-translate-y-0.5 hover:bg-synthora-blue-hover hover:shadow-[0_18px_38px_rgba(37,99,235,.32)]"
           >
             Get Started
           </a>
@@ -63,7 +74,7 @@ export default function Navbar() {
 
         <button
           type="button"
-          className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white/85 text-[#0F172A] shadow-[0_14px_34px_rgba(15,23,42,.08)] backdrop-blur lg:hidden"
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-synthora-border bg-white text-synthora-text shadow-[0_12px_28px_rgba(15,23,42,.08)] lg:hidden"
           aria-label={isOpen ? "Close navigation menu" : "Open navigation menu"}
           aria-expanded={isOpen}
           onClick={() => setIsOpen((value) => !value)}
@@ -77,31 +88,39 @@ export default function Navbar() {
           initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -12 }}
-          className="mx-5 mb-5 rounded-[28px] border border-slate-200 bg-white/95 p-4 shadow-glass backdrop-blur-2xl lg:hidden"
+          className="pointer-events-auto mx-auto mt-3 max-w-6xl rounded-xl border border-synthora-border bg-white p-4 shadow-[0_22px_55px_rgba(15,23,42,.12)] lg:hidden"
         >
           <div className="grid gap-1">
             {navItems.map((item) => (
               <a
                 key={item.label}
                 href={item.href}
-                className="rounded-2xl px-4 py-3 text-base font-semibold text-[#1E293B] hover:bg-sky-50 hover:text-[#0EA5E9]"
+                className="flex items-center justify-between rounded-xl px-4 py-3 text-sm font-medium text-synthora-muted transition hover:bg-blue-50 hover:text-synthora-blue"
                 onClick={() => setIsOpen(false)}
               >
-                {item.label}
+                <span>{item.label}</span>
+                {item.hasDropdown ? <ChevronDown size={16} strokeWidth={2.2} /> : null}
               </a>
             ))}
+          </div>
+          <div className="mt-3 flex items-center justify-between rounded-xl px-4 py-3 text-sm font-medium text-synthora-muted">
+            <span className="inline-flex items-center gap-2">
+              <Globe2 size={16} />
+              EN
+            </span>
+            <ChevronDown size={15} strokeWidth={2.2} />
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <a
               href="#login"
-              className="rounded-full border border-slate-300 px-4 py-3 text-center text-sm font-semibold text-[#1E293B]"
+              className="rounded-full px-4 py-3 text-center text-sm font-medium text-synthora-muted transition hover:bg-synthora-surface hover:text-synthora-text"
               onClick={() => setIsOpen(false)}
             >
               Login
             </a>
             <a
               href="#get-started"
-              className="rounded-full bg-[#1E293B] px-4 py-3 text-center text-sm font-bold text-white"
+              className="rounded-full bg-synthora-blue px-4 py-3 text-center text-sm font-bold text-white shadow-[0_14px_30px_rgba(37,99,235,.24)] transition hover:bg-synthora-blue-hover"
               onClick={() => setIsOpen(false)}
             >
               Get Started

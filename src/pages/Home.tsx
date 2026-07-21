@@ -8,7 +8,7 @@ import Footer from "../components/Footer";
 
 export default function Home() {
   return (
-    <main className="min-h-screen overflow-hidden bg-white font-inter">
+    <main className="min-h-screen overflow-hidden bg-synthora-radial font-inter text-synthora-text">
       <Navbar />
       <Hero />
       <AssessmentMarquee />
