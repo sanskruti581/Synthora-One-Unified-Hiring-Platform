@@ -3,7 +3,7 @@
 Synthora.AI is an AI-powered recruitment platform designed to make hiring faster, more consistent, and more insight-driven. The project focuses on automating the complete candidate evaluation journey, from candidate intake and job description analysis to interview rounds, scoring, ranking, and final hiring reports.
 
 ## Why Synthora.AI
-
+and 
 Hiring teams often spend a large amount of time on repetitive screening, interview coordination, manual evaluation, and comparison of candidates. These steps can slow down hiring drives and may lead to inconsistent decisions when different interviewers evaluate candidates differently.
 
 Synthora.AI addresses this by providing a unified platform where AI helps organizations evaluate candidates using structured, role-specific signals. It reduces manual effort while giving recruiters and hiring managers clearer data for shortlisting the right talent.

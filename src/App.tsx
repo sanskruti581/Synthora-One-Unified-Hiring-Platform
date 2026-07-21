@@ -1,10 +1,10 @@
-import { Route, Routes } from "react-router-dom";
-import Home from "./pages/Home";
+import { ThemeProvider } from "./context/ThemeContext";
+import AppRoutes from "./routes/AppRoutes";
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Home />} />
-    </Routes>
+    <ThemeProvider>
+      <AppRoutes />
+    </ThemeProvider>
   );
 }

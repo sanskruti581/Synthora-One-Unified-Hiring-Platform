@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { ChevronDown, Menu, X } from "lucide-react";
 import { motion } from "framer-motion";
 import logo from "../../images/logo.png";
@@ -30,9 +31,7 @@ export default function Navbar() {
   }, []);
 
   return (
-    <header
-      className="pointer-events-none fixed left-0 right-0 top-0 z-50 px-3 pt-4 sm:px-5"
-    >
+    <header className="pointer-events-none fixed left-0 right-0 top-0 z-50 px-3 pt-4 sm:px-5">
       <nav
         className={`pointer-events-auto mx-auto flex h-16 max-w-6xl items-center justify-between rounded-full border border-synthora-border bg-white px-4 py-2.5 shadow-[0_18px_45px_rgba(15,23,42,.08)] transition-all duration-300 sm:px-5 lg:px-6 ${
           isScrolled ? "shadow-[0_20px_55px_rgba(15,23,42,.12)]" : ""
@@ -74,12 +73,18 @@ export default function Navbar() {
         </div>
 
         <div className="hidden items-center gap-4 lg:flex">
-          <a
-            href="#get-started"
+          <Link
+            to="/login"
+            className="text-sm font-medium text-synthora-muted transition hover:text-synthora-text"
+          >
+            Login
+          </Link>
+          <Link
+            to="/company/register"
             className="rounded-full bg-synthora-blue px-5 py-2.5 text-sm font-bold text-white shadow-[0_14px_30px_rgba(37,99,235,.24)] transition duration-300 hover:-translate-y-0.5 hover:bg-synthora-blue-hover hover:shadow-[0_18px_38px_rgba(37,99,235,.32)]"
           >
-            Book a Demo
-          </a>
+            Register Company
+          </Link>
         </div>
 
         <button
@@ -128,14 +133,21 @@ export default function Navbar() {
               </div>
             ))}
           </div>
-          <div className="mt-4 grid gap-3">
-            <a
-              href="#get-started"
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <Link
+              to="/login"
+              className="rounded-full px-4 py-3 text-center text-sm font-medium text-synthora-muted transition hover:bg-synthora-surface hover:text-synthora-text"
+              onClick={() => setIsOpen(false)}
+            >
+              Login
+            </Link>
+            <Link
+              to="/company/register"
               className="rounded-full bg-synthora-blue px-4 py-3 text-center text-sm font-bold text-white shadow-[0_14px_30px_rgba(37,99,235,.24)] transition hover:bg-synthora-blue-hover"
               onClick={() => setIsOpen(false)}
             >
-              Book a Demo
-            </a>
+              Register Company
+            </Link>
           </div>
         </motion.div>
       ) : null}

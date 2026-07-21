@@ -11,9 +11,9 @@ type Question = {
 const questions: Question[] = [
   {
     id: 1,
-    question: "A shopkeeper sold an item for ₹1,200 at a 20% profit. What was the cost price?",
-    options: ["₹900", "₹950", "₹1,000", "₹1,050"],
-    answer: "₹1,000",
+    question: "A shopkeeper sold an item for INR 1,200 at a 20% profit. What was the cost price?",
+    options: ["INR 900", "INR 950", "INR 1,000", "INR 1,050"],
+    answer: "INR 1,000",
   },
   {
     id: 2,
@@ -55,6 +55,16 @@ export default function AssessmentDemo() {
     setAnswers((prev) => ({ ...prev, [questionId]: option }));
   };
 
+  const handleSubmit = () => {
+    if (submitted) {
+      setAnswers({});
+      setSubmitted(false);
+      return;
+    }
+
+    setSubmitted(true);
+  };
+
   return (
     <main className="min-h-screen bg-synthora-radial px-5 py-10 text-white sm:px-8 lg:px-16">
       <div className="mx-auto max-w-5xl rounded-[32px] border border-white/15 bg-[#21085F]/80 p-6 shadow-[0_24px_64px_rgba(0,0,0,0.28)] backdrop-blur-2xl sm:p-8 lg:p-10">
@@ -63,7 +73,8 @@ export default function AssessmentDemo() {
             <p className="text-sm font-semibold uppercase tracking-[0.25em] text-[#FF9FC2]">Aptitude Demo</p>
             <h1 className="mt-2 text-3xl font-black sm:text-4xl">Try a sample aptitude round</h1>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-white/75 sm:text-base">
-              This is a lightweight preview of the assessment experience for Synthora.One. You can test the flow and see how the interface works.
+              This is a lightweight preview of the assessment experience for Synthora.One. You can test the flow and
+              see how the interface works.
             </p>
           </div>
           <Link
@@ -74,11 +85,13 @@ export default function AssessmentDemo() {
           </Link>
         </div>
 
-        <div className="mt-8 rounded-[24px] border border-white/15 bg-white/10 p-4 sm:p-6">
+        <div className="mt-8 grid gap-4 rounded-[24px] border border-white/15 bg-white/10 p-4 sm:p-6">
           {questions.map((question, index) => (
             <div key={question.id} className="rounded-[20px] border border-white/10 bg-[#2d0f6a]/70 p-4 sm:p-5">
               <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold">{index + 1}. {question.question}</h2>
+                <h2 className="text-lg font-semibold">
+                  {index + 1}. {question.question}
+                </h2>
                 <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white/70">
                   {submitted ? (answers[question.id] === question.answer ? "Correct" : "Review") : "Pending"}
                 </span>
@@ -86,6 +99,7 @@ export default function AssessmentDemo() {
               <div className="grid gap-3">
                 {question.options.map((option) => {
                   const selected = answers[question.id] === option;
+
                   return (
                     <button
                       key={option}
@@ -105,15 +119,15 @@ export default function AssessmentDemo() {
             </div>
           ))}
 
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-white/70">
               {submitted
                 ? `You scored ${score} out of ${questions.length}.`
-                : `Select answers and submit to see your score.`}
+                : "Select answers and submit to see your score."}
             </p>
             <button
               type="button"
-              onClick={() => setSubmitted(true)}
+              onClick={handleSubmit}
               className="rounded-full bg-white px-6 py-3 text-sm font-semibold text-[#5A22E6] transition hover:-translate-y-0.5"
             >
               {submitted ? "Retake Demo" : "Submit Demo"}
