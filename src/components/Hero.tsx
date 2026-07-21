@@ -1,5 +1,6 @@
 import { CalendarCheck } from "lucide-react";
 import { motion } from "framer-motion";
+import { Link } from "react-router-dom";
 import dashboardGirl from "../../images/Dashboard_girl.png";
 
 const fadeUp = {
@@ -58,18 +59,18 @@ export default function Hero() {
           </motion.p>
 
           <motion.div variants={fadeUp} className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <a
-              href="#get-started"
+            <Link
+              to="/company/register"
               className="inline-flex items-center justify-center rounded-xl bg-slate-950 px-6 py-3 font-medium text-white transition hover:bg-slate-800"
             >
-              Get Started Free
-            </a>
-            <a
-              href="#demo"
+              Register Company
+            </Link>
+            <Link
+              to="/login"
               className="inline-flex items-center justify-center rounded-xl bg-slate-100 px-6 py-3 font-medium text-slate-700 transition hover:bg-slate-200 sm:ml-4"
             >
-              Watch Demo
-            </a>
+              Login
+            </Link>
           </motion.div>
         </motion.div>
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import { motion } from "framer-motion";
 import logo from "../../images/logo.png";
@@ -47,18 +48,18 @@ export default function Navbar() {
         </div>
 
         <div className="hidden items-center gap-3 lg:flex">
-          <a
-            href="#login"
+          <Link
+            to="/login"
             className="rounded-full border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-[#1E293B] transition hover:border-[#0EA5E9] hover:text-[#0EA5E9]"
           >
             Login
-          </a>
-          <a
-            href="#get-started"
+          </Link>
+          <Link
+            to="/company/register"
             className="rounded-full bg-[#1E293B] px-6 py-3 text-sm font-bold text-white shadow-[0_18px_42px_rgba(30,41,59,.18)] transition hover:-translate-y-0.5 hover:bg-[#0F172A]"
           >
-            Get Started
-          </a>
+            Register Company
+          </Link>
         </div>
 
         <button
@@ -92,20 +93,20 @@ export default function Navbar() {
             ))}
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <a
-              href="#login"
+            <Link
+              to="/login"
               className="rounded-full border border-slate-300 px-4 py-3 text-center text-sm font-semibold text-[#1E293B]"
               onClick={() => setIsOpen(false)}
             >
               Login
-            </a>
-            <a
-              href="#get-started"
+            </Link>
+            <Link
+              to="/company/register"
               className="rounded-full bg-[#1E293B] px-4 py-3 text-center text-sm font-bold text-white"
               onClick={() => setIsOpen(false)}
             >
-              Get Started
-            </a>
+              Register Company
+            </Link>
           </div>
         </motion.div>
       ) : null}
