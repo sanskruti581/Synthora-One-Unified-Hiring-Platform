@@ -1,7 +1,26 @@
 import nodemailer from "nodemailer";
 
+function sanitizeSmtpConfig() {
+  const host = process.env.SMTP_HOST?.trim();
+  const user = process.env.SMTP_USER?.trim();
+  const pass = process.env.SMTP_PASS?.replace(/\s+/g, "");
+  const port = Number(process.env.SMTP_PORT || 587);
+
+  return {
+    host,
+    port,
+    secure: port === 465,
+    auth: {
+      user,
+      pass,
+    },
+    from: process.env.MAIL_FROM?.trim() || user,
+  };
+}
+
 function hasSmtpConfig() {
-  return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+  const { host, auth } = sanitizeSmtpConfig();
+  return Boolean(host && auth.user && auth.pass);
 }
 
 export async function sendStudentInvitationEmail({
@@ -19,21 +38,20 @@ export async function sendStudentInvitationEmail({
     return { status: "smtp_not_configured" };
   }
 
+  const { host, port, secure, auth, from } = sanitizeSmtpConfig();
   const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: Number(process.env.SMTP_PORT) === 465,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
+    host,
+    port,
+    secure,
+    auth,
   });
 
-  await transporter.sendMail({
-    from: process.env.MAIL_FROM || process.env.SMTP_USER,
-    to,
-    subject: `Invitation for Aptitude Assessment - ${companyName}`,
-    html: `
+  try {
+    const info = await transporter.sendMail({
+      from,
+      to,
+      subject: `Invitation for Aptitude Assessment - ${companyName}`,
+      html: `
       <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
         <p>Dear ${studentName || "Student"},</p>
         <p>You have been invited to participate in the recruitment process.</p>
@@ -50,7 +68,12 @@ export async function sendStudentInvitationEmail({
         <p>Regards<br/>Synthora AI Recruitment Platform</p>
       </div>
     `,
-  });
+    });
 
-  return { status: "sent" };
+    console.log(`Email sent to ${to} via ${host}:${port} (${secure ? "SSL" : "TLS"})`, { messageId: info.messageId });
+    return { status: "sent" };
+  } catch (error) {
+    console.error(`Failed to send email to ${to}:`, error?.message || error);
+    throw error;
+  }
 }
