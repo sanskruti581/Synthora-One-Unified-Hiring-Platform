@@ -102,7 +102,7 @@ export default function DriveDetails() {
   if (isLoading) {
     return (
       <DashboardLayout title="Hiring Drive Details" subtitle="Loading live hiring drive information.">
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm font-semibold text-slate-500 dark:border-white/10 dark:bg-white/10 dark:text-slate-300">
+        <div className="rounded-xl border border-synthora-border bg-white/95 p-6 text-sm font-semibold text-synthora-muted shadow-[0_18px_50px_rgba(15,23,42,.07)]">
           Loading drive details...
         </div>
       </DashboardLayout>
@@ -112,7 +112,7 @@ export default function DriveDetails() {
   if (!drive) {
     return (
       <DashboardLayout title="Hiring Drive Details" subtitle="The requested drive could not be found.">
-        <Link to="/company/dashboard" className="text-sm font-bold text-sky-600 dark:text-sky-300">
+        <Link to="/company/dashboard" className="text-sm font-bold text-synthora-blue">
           Back to dashboard
         </Link>
       </DashboardLayout>
@@ -123,12 +123,12 @@ export default function DriveDetails() {
     <DashboardLayout title={drive.driveName} subtitle="Monitor invitations, assessment progress, scores, and final result downloads.">
       <div className="grid gap-6">
         {message ? (
-          <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-bold text-sky-700 dark:border-sky-400/20 dark:bg-sky-400/10 dark:text-sky-200">
+          <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-bold text-sky-700">
             {message}
           </div>
         ) : null}
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/10">
+        <section className="rounded-xl border border-synthora-border bg-white/95 p-5 shadow-[0_18px_50px_rgba(15,23,42,.07)] backdrop-blur">
           <div className="grid gap-4 lg:grid-cols-3">
             <Detail label="Job Role" value={drive.jobRole} />
             <Detail label="Status" value={drive.status} />
@@ -167,11 +167,11 @@ export default function DriveDetails() {
           <Stat label="Qualified / Rejected" value={`${stats.qualifiedStudents} / ${stats.rejectedStudents}`} />
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/10">
+        <section className="rounded-xl border border-synthora-border bg-white/95 p-5 shadow-[0_18px_50px_rgba(15,23,42,.07)] backdrop-blur">
           <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
             <div>
-              <h2 className="text-lg font-extrabold text-slate-950 dark:text-white">Students</h2>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Live status is refreshed from MongoDB every 10 seconds.</p>
+              <h2 className="text-lg font-extrabold text-synthora-text">Students</h2>
+              <p className="mt-1 text-sm text-synthora-muted">Live status is refreshed from MongoDB every 10 seconds.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               {filters.map((item) => (
@@ -181,8 +181,8 @@ export default function DriveDetails() {
                   onClick={() => setFilter(item)}
                   className={`h-10 rounded-xl px-3 text-xs font-extrabold transition ${
                     filter === item
-                      ? "bg-slate-950 text-white dark:bg-sky-400 dark:text-slate-950"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-white/10 dark:text-slate-300"
+                      ? "bg-synthora-blue text-white shadow-[0_10px_22px_rgba(37,99,235,.18)]"
+                      : "bg-blue-50 text-synthora-muted hover:bg-blue-100 hover:text-synthora-blue"
                   }`}
                 >
                   {item}
@@ -191,9 +191,9 @@ export default function DriveDetails() {
             </div>
           </div>
 
-          <div className="mt-5 overflow-x-auto">
+          <div className="mt-5 overflow-x-auto rounded-xl border border-synthora-border">
             <table className="min-w-[1040px] w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase text-slate-500 dark:bg-white/5 dark:text-slate-400">
+              <thead className="bg-blue-50/80 text-xs uppercase text-synthora-muted">
                 <tr>
                   {["Student Name", "Email", "Invitation Status", "Email Sent", "Assessment Status", "Started Time", "Completed Time", "Score", "Qualified / Rejected"].map((heading) => (
                     <th key={heading} className="px-4 py-3 font-extrabold">
@@ -202,11 +202,11 @@ export default function DriveDetails() {
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-white/10">
+              <tbody className="divide-y divide-synthora-border bg-white">
                 {visibleStudents.map((student) => (
-                  <tr key={student._id}>
-                    <td className="px-4 py-3 font-bold text-slate-900 dark:text-white">{student.studentName || "Student"}</td>
-                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{student.email}</td>
+                  <tr key={student._id} className="transition hover:bg-blue-50/50">
+                    <td className="px-4 py-3 font-bold text-synthora-text">{student.studentName || "Student"}</td>
+                    <td className="px-4 py-3 text-synthora-muted">{student.email}</td>
                     <td className="px-4 py-3">{student.invitationStatus}</td>
                     <td className="px-4 py-3">{student.emailSent ? "Sent" : student.emailSentStatus}</td>
                     <td className="px-4 py-3">{student.assessmentStatus}</td>
@@ -227,18 +227,18 @@ export default function DriveDetails() {
 
 function Detail({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl bg-slate-50 p-4 dark:bg-white/5">
-      <p className="text-xs font-extrabold uppercase text-slate-500 dark:text-slate-400">{label}</p>
-      <p className="mt-1 break-words text-sm font-bold text-slate-950 dark:text-white">{value}</p>
+    <div className="rounded-xl bg-blue-50/70 p-4">
+      <p className="text-xs font-extrabold uppercase text-synthora-muted">{label}</p>
+      <p className="mt-1 break-words text-sm font-bold text-synthora-text">{value}</p>
     </div>
   );
 }
 
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/10">
-      <p className="text-2xl font-extrabold text-slate-950 dark:text-white">{value}</p>
-      <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">{label}</p>
+    <div className="rounded-xl border border-synthora-border bg-white/95 p-5 shadow-[0_14px_35px_rgba(15,23,42,.06)]">
+      <p className="text-2xl font-extrabold text-synthora-text">{value}</p>
+      <p className="mt-1 text-sm font-semibold text-synthora-muted">{label}</p>
     </div>
   );
 }
@@ -248,7 +248,7 @@ function ActionButton({ label, icon: Icon, onClick }: { label: string; icon: Luc
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-bold text-white transition hover:bg-slate-800 dark:bg-sky-400 dark:text-slate-950"
+      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-synthora-blue px-4 text-sm font-bold text-white shadow-[0_12px_24px_rgba(37,99,235,.20)] transition hover:bg-synthora-blue-hover"
     >
       <Icon className="h-4 w-4" />
       {label}
