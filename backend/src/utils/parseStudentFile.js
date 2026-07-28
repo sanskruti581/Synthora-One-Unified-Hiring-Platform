@@ -5,6 +5,7 @@ const emailKeys = ["email", "mail", "emailid", "emailaddress", "studentemail", "
 const nameKeys = ["name", "studentname", "fullname"];
 const phoneKeys = ["phone", "mobile", "phonenumber", "contact", "contactnumber"];
 const emailPattern = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+const emailGlobalPattern = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 
 function normalizeKey(key) {
   return String(key ?? "")
@@ -22,6 +23,10 @@ function extractEmail(value) {
   return match ? match[0].toLowerCase() : "";
 }
 
+function extractEmails(value) {
+  return [...String(value ?? "").matchAll(emailGlobalPattern)].map((match) => match[0].toLowerCase());
+}
+
 function pickValue(row, keys) {
   const normalizedRow = Object.fromEntries(
     Object.entries(row).map(([key, value]) => [normalizeKey(key), value]),
@@ -29,6 +34,23 @@ function pickValue(row, keys) {
 
   const matchedKey = keys.find((key) => normalizedRow[key] !== undefined);
   return matchedKey ? String(normalizedRow[matchedKey]).trim() : "";
+}
+
+function nearestTextValue(values, startIndex) {
+  for (let offset = 1; offset < values.length; offset += 1) {
+    const left = values[startIndex - offset];
+    const right = values[startIndex + offset];
+
+    if (left && !extractEmail(left)) {
+      return left;
+    }
+
+    if (right && !extractEmail(right)) {
+      return right;
+    }
+  }
+
+  return "";
 }
 
 function rowsFromTable(table) {
@@ -45,7 +67,15 @@ function rowsFromTable(table) {
     throw new Error("Student file header row is invalid. Please check the uploaded spreadsheet format.");
   }
 
-  const headers = headerRow.map((header) => String(header ?? "").trim());
+  const headerCounts = new Map();
+  const headers = headerRow.map((header, index) => {
+    const baseHeader = String(header ?? "").trim() || `Column ${index + 1}`;
+    const normalizedHeader = normalizeKey(baseHeader);
+    const count = (headerCounts.get(normalizedHeader) || 0) + 1;
+    headerCounts.set(normalizedHeader, count);
+
+    return count === 1 ? baseHeader : `${baseHeader} ${count}`;
+  });
 
   return dataRows.map((row) =>
     Object.fromEntries(headers.map((header, index) => [header, Array.isArray(row) ? (row[index] ?? "") : ""])),
@@ -76,36 +106,57 @@ function studentsFromRawValues(rawRows) {
     const values = Array.isArray(row)
       ? row.map((value) => String(value ?? "").trim())
       : Object.values(row).map((value) => String(value ?? "").trim());
-    const emailIndex = values.findIndex((value) => extractEmail(value));
+    const emailEntries = values.flatMap((value, index) => extractEmails(value).map((email) => ({ email, index })));
 
-    if (emailIndex === -1) {
+    if (emailEntries.length === 0) {
       continue;
     }
 
-    const email = extractEmail(values[emailIndex]);
-    const sameCellName = values[emailIndex].replace(emailPattern, "").replace(/[-_:|,;]/g, " ").trim();
-    const adjacentName = values.find((value, index) => index !== emailIndex && value && !extractEmail(value)) || "";
-    const name = adjacentName || sameCellName;
+    for (const { email, index: emailIndex } of emailEntries) {
+      const sameCellName = values[emailIndex].replace(emailPattern, "").replace(/[-_:|,;]/g, " ").trim();
+      const adjacentName = nearestTextValue(values, emailIndex);
+      const name = adjacentName || sameCellName;
 
-    students.push({
-      name,
-      email,
-      phone: "",
-    });
+      students.push({
+        name,
+        email,
+        phone: "",
+      });
+    }
   }
 
   return students;
 }
 
+function dedupeStudents(students) {
+  const studentByEmail = new Map();
+
+  for (const student of students) {
+    if (!isValidEmail(student.email)) {
+      continue;
+    }
+
+    const existing = studentByEmail.get(student.email);
+
+    studentByEmail.set(student.email, {
+      name: existing?.name || student.name || "",
+      email: student.email,
+      phone: existing?.phone || student.phone || "",
+    });
+  }
+
+  return [...studentByEmail.values()];
+}
+
 export async function parseStudentFile(buffer, filename = "") {
   const isCsv = filename.toLowerCase().endsWith(".csv");
-  const table = isCsv ? null : await readXlsxFile(buffer);
-  const rows = isCsv ? parseCsv(buffer, { columns: true, skip_empty_lines: true, trim: true }) : rowsFromTable(table);
-  const students = studentsFromRows(rows);
+  const table = isCsv ? parseCsv(buffer, { skip_empty_lines: true, trim: true }) : await readXlsxFile(buffer);
+  const rows = rowsFromTable(table);
+  const students = dedupeStudents([...studentsFromRows(rows), ...studentsFromRawValues(table)]);
 
   if (students.length > 0) {
     return students;
   }
 
-  return isCsv ? studentsFromRawValues(rows) : studentsFromRawValues(table);
+  return studentsFromRawValues(table);
 }

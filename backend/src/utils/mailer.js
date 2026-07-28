@@ -5,6 +5,8 @@ function sanitizeSmtpConfig() {
   const user = process.env.SMTP_USER?.trim();
   const pass = process.env.SMTP_PASS?.replace(/\s+/g, "");
   const port = Number(process.env.SMTP_PORT || 587);
+  const fromAddress = process.env.MAIL_FROM?.trim() || user;
+  const fromName = process.env.MAIL_FROM_NAME?.trim() || "Synthora Recruitment";
 
   return {
     host,
@@ -14,7 +16,8 @@ function sanitizeSmtpConfig() {
       user,
       pass,
     },
-    from: process.env.MAIL_FROM?.trim() || user,
+    from: `"${fromName}" <${fromAddress}>`,
+    replyTo: process.env.MAIL_REPLY_TO?.trim() || fromAddress,
   };
 }
 
@@ -38,7 +41,7 @@ export async function sendStudentInvitationEmail({
     return { status: "smtp_not_configured" };
   }
 
-  const { host, port, secure, auth, from } = sanitizeSmtpConfig();
+  const { host, port, secure, auth, from, replyTo } = sanitizeSmtpConfig();
   const transporter = nodemailer.createTransport({
     host,
     port,
@@ -47,14 +50,41 @@ export async function sendStudentInvitationEmail({
   });
 
   try {
+    const text = [
+      `Dear ${studentName || "Student"},`,
+      "",
+      `You have been invited by ${companyName} to participate in the recruitment process.`,
+      "",
+      `Company: ${companyName}`,
+      `Job Role: ${jobRole}`,
+      `Hiring Drive: ${driveName}`,
+      "Round: Aptitude Assessment",
+      `Exam Date: ${examDate}`,
+      `Exam Time: ${examTime}`,
+      `Duration: ${durationMinutes} minutes`,
+      "",
+      "Please open your unique invitation link:",
+      activationLink,
+      "",
+      "This invitation is personal. Do not share this link.",
+      "",
+      "Regards,",
+      "Synthora Recruitment Team",
+    ].join("\n");
+
     const info = await transporter.sendMail({
       from,
+      replyTo,
       to,
       subject: `Invitation for Aptitude Assessment - ${companyName}`,
+      text,
+      headers: {
+        "X-Auto-Response-Suppress": "OOF, AutoReply",
+      },
       html: `
       <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
         <p>Dear ${studentName || "Student"},</p>
-        <p>You have been invited to participate in the recruitment process.</p>
+        <p>You have been invited by ${companyName} to participate in the recruitment process.</p>
         <p><strong>Company</strong><br/>${companyName}</p>
         <p><strong>Job Role</strong><br/>${jobRole}</p>
         <p><strong>Hiring Drive</strong><br/>${driveName}</p>
@@ -65,7 +95,7 @@ export async function sendStudentInvitationEmail({
         <p>Please use your unique invitation link below.</p>
         <p><a href="${activationLink}">${activationLink}</a></p>
         <p>This invitation is personal.<br/>Do not share this link.</p>
-        <p>Regards<br/>Synthora AI Recruitment Platform</p>
+        <p>Regards<br/>Synthora Recruitment Team</p>
       </div>
     `,
     });
