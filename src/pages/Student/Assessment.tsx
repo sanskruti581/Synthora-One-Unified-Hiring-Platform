@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ArrowRight, CheckCircle2, Clock3, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Camera, CheckCircle2, Clock3, Maximize2, ShieldCheck } from "lucide-react";
 import ThemeToggle from "../../components/ThemeToggle";
 import { getAssessment, saveAssessmentAnswers, startAssessmentForDrive, submitAssessment, type AssessmentData } from "../../services/studentService";
 import { useCountdown } from "../../hooks/useCountdown";
@@ -48,14 +48,30 @@ export default function Assessment() {
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasStartedExam, setHasStartedExam] = useState(false);
-  const countdown = useCountdown(assessment ? assessment.examStartAt : new Date().toISOString());
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [proctorViolation, setProctorViolation] = useState("");
+  const [isSecuringExam, setIsSecuringExam] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(Boolean(document.fullscreenElement));
+  const hasSubmittedRef = useRef(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const examEndAt = useMemo(() => {
+    if (!assessment?.startedAt) {
+      return "";
+    }
+
+    return new Date(new Date(assessment.startedAt).getTime() + Number(assessment.durationMinutes) * 60 * 1000).toISOString();
+  }, [assessment?.durationMinutes, assessment?.startedAt]);
+  const startCountdown = useCountdown(assessment ? assessment.examStartAt : new Date().toISOString());
+  const examCountdown = useCountdown(examEndAt || new Date().toISOString());
+  const activeCountdown = hasStartedExam && examEndAt ? examCountdown : startCountdown;
   const currentQuestion = questions[currentIndex];
+  const proctorReady = Boolean(cameraStream && isFullscreen);
   const canStartExam =
     Boolean(assessment) &&
-    countdown.days === 0 &&
-    countdown.hours === 0 &&
-    countdown.minutes === 0 &&
-    countdown.seconds === 0;
+    startCountdown.days === 0 &&
+    startCountdown.hours === 0 &&
+    startCountdown.minutes === 0 &&
+    startCountdown.seconds === 0;
 
   useEffect(() => {
     getAssessment(driveId)
@@ -66,6 +82,25 @@ export default function Assessment() {
       })
       .catch(() => setMessage("Unable to load assessment. Please open your invitation link again."));
   }, [driveId]);
+
+  useEffect(() => {
+    if (videoRef.current && cameraStream) {
+      videoRef.current.srcObject = cameraStream;
+    }
+  }, [cameraStream]);
+
+  useEffect(() => {
+    const handleFullscreenState = () => setIsFullscreen(Boolean(document.fullscreenElement));
+
+    document.addEventListener("fullscreenchange", handleFullscreenState);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenState);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      cameraStream?.getTracks().forEach((track) => track.stop());
+    };
+  }, [cameraStream]);
 
   useEffect(() => {
     if (!assessment || !hasStartedExam) {
@@ -84,32 +119,135 @@ export default function Assessment() {
     [answers],
   );
 
-  const handleStartExam = async () => {
-    setMessage("");
-
-    try {
-      await startAssessmentForDrive(driveId);
-      setHasStartedExam(true);
-      const response = await getAssessment(driveId);
-      setAssessment(response.data);
-    } catch {
-      setMessage("The assessment can only start at the official exam time.");
+  const submitNow = useCallback(async (reason?: string) => {
+    if (hasSubmittedRef.current) {
+      return;
     }
-  };
 
-  const handleSubmit = async () => {
+    hasSubmittedRef.current = true;
     setIsSubmitting(true);
-    setMessage("");
+
+    if (reason) {
+      setProctorViolation(reason);
+      setMessage(`${reason} Your assessment is being submitted.`);
+    } else {
+      setMessage("");
+    }
 
     try {
       const response = await submitAssessment(score, answers);
       setMessage(`Assessment submitted. Score: ${score}. Result: ${response.data.result}.`);
       window.setTimeout(() => navigate("/student/dashboard"), 1200);
     } catch {
+      hasSubmittedRef.current = false;
       setMessage("Could not submit assessment. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
+  }, [answers, navigate, score]);
+
+  const handleProctorViolation = useCallback((reason: string) => {
+    if (!hasStartedExam || !proctorReady || hasSubmittedRef.current) {
+      return;
+    }
+
+    void submitNow(reason);
+  }, [hasStartedExam, proctorReady, submitNow]);
+
+  useEffect(() => {
+    if (!hasStartedExam || !proctorReady) {
+      return;
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        handleProctorViolation("Tab switching is not allowed.");
+      }
+    };
+
+    const handleBlur = () => handleProctorViolation("Leaving the assessment window is not allowed.");
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        handleProctorViolation("Fullscreen mode was exited.");
+      }
+    };
+    const handleContextMenu = (event: MouseEvent) => event.preventDefault();
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener("contextmenu", handleContextMenu);
+    window.addEventListener("blur", handleBlur);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener("contextmenu", handleContextMenu);
+      window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [handleProctorViolation, hasStartedExam, proctorReady]);
+
+  useEffect(() => {
+    const timeIsOver =
+      hasStartedExam &&
+      examEndAt &&
+      examCountdown.days === 0 &&
+      examCountdown.hours === 0 &&
+      examCountdown.minutes === 0 &&
+      examCountdown.seconds === 0;
+
+    if (timeIsOver) {
+      void submitNow("Time is over.");
+    }
+  }, [examCountdown, examEndAt, hasStartedExam, submitNow]);
+
+  const handleStartExam = async () => {
+    setMessage("");
+    setProctorViolation("");
+    setIsSecuringExam(true);
+
+    let stream: MediaStream | null = null;
+
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setMessage("Camera access is required, but this browser does not support camera permissions.");
+        return;
+      }
+
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      setCameraStream(stream);
+
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+      }
+      setIsFullscreen(true);
+
+      await startAssessmentForDrive(driveId);
+      setHasStartedExam(true);
+      const response = await getAssessment(driveId);
+      setAssessment(response.data);
+    } catch (error) {
+      stream?.getTracks().forEach((track) => track.stop());
+      setCameraStream(null);
+
+      if (error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "PermissionDeniedError")) {
+        setMessage("Camera and fullscreen permission are required before starting the assessment.");
+        return;
+      }
+
+      setMessage("The assessment can only start at the official exam time and requires camera plus fullscreen access.");
+    } finally {
+      setIsSecuringExam(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    await submitNow();
   };
 
   return (
@@ -135,22 +273,33 @@ export default function Assessment() {
           <div className="mt-5 rounded-2xl bg-slate-950 p-4 text-white dark:bg-white dark:text-slate-950">
             <p className="flex items-center gap-2 text-xs font-extrabold uppercase text-sky-300 dark:text-sky-700">
               <Clock3 className="h-4 w-4" />
-              Countdown Timer
+              {hasStartedExam ? "Assessment Timer" : "Countdown Timer"}
             </p>
             <div className="mt-3 grid grid-cols-4 gap-2 text-center">
-              <TimeBlock label="D" value={countdown.days} />
-              <TimeBlock label="H" value={countdown.hours} />
-              <TimeBlock label="M" value={countdown.minutes} />
-              <TimeBlock label="S" value={countdown.seconds} />
+              <TimeBlock label="D" value={activeCountdown.days} />
+              <TimeBlock label="H" value={activeCountdown.hours} />
+              <TimeBlock label="M" value={activeCountdown.minutes} />
+              <TimeBlock label="S" value={activeCountdown.seconds} />
             </div>
           </div>
+
+          {hasStartedExam ? (
+            <div className="mt-5 overflow-hidden rounded-2xl border border-emerald-200 bg-emerald-50 dark:border-emerald-400/20 dark:bg-emerald-400/10">
+              <video ref={videoRef} autoPlay muted playsInline className="aspect-video w-full bg-slate-950 object-cover" />
+              <p className="flex items-center gap-2 px-4 py-3 text-xs font-extrabold uppercase text-emerald-700 dark:text-emerald-200">
+                <Camera className="h-4 w-4" />
+                Camera Monitoring Active
+              </p>
+            </div>
+          ) : null}
 
           <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">
             <p className="text-xs font-extrabold uppercase text-slate-500 dark:text-slate-400">Rules</p>
             <ul className="mt-3 space-y-2 text-sm text-slate-700 dark:text-slate-200">
               <li>Stable Internet Connection</li>
-              <li>Camera should remain ON (future feature)</li>
-              <li>Do not refresh page</li>
+              <li>Camera must remain ON</li>
+              <li>Fullscreen mode is required</li>
+              <li>Do not refresh page or switch tabs</li>
               <li>Timer cannot be paused</li>
             </ul>
           </div>
@@ -158,7 +307,11 @@ export default function Assessment() {
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/10">
           {message ? (
-            <p className="mb-4 rounded-xl bg-sky-50 px-4 py-3 text-sm font-bold text-sky-700 dark:bg-sky-400/10 dark:text-sky-200">
+            <p className={`mb-4 rounded-xl px-4 py-3 text-sm font-bold ${
+              proctorViolation
+                ? "bg-rose-50 text-rose-700 dark:bg-rose-400/10 dark:text-rose-200"
+                : "bg-sky-50 text-sky-700 dark:bg-sky-400/10 dark:text-sky-200"
+            }`}>
               {message}
             </p>
           ) : null}
@@ -178,21 +331,51 @@ export default function Assessment() {
 
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-bold text-slate-600 dark:text-slate-300">
-                  {canStartExam ? "The exam has started. You can begin now." : `Assessment starts in ${formatCountdown(countdown)}`}
+                  {canStartExam ? "Allow camera access and fullscreen to begin." : `Assessment starts in ${formatCountdown(startCountdown)}`}
                 </p>
                 <button
                   type="button"
                   onClick={handleStartExam}
-                  disabled={!canStartExam}
+                  disabled={!canStartExam || isSecuringExam}
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 text-sm font-extrabold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-sky-400 dark:text-slate-950"
                 >
-                  <ShieldCheck className="h-4 w-4" />
-                  Start Assessment
+                  {isSecuringExam ? <Maximize2 className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+                  {isSecuringExam ? "Securing..." : "Start Proctored Assessment"}
                 </button>
               </div>
             </div>
+          ) : !proctorReady ? (
+            <div className="grid gap-4">
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-400/20 dark:bg-amber-400/10">
+                <p className="flex items-center gap-2 text-xs font-extrabold uppercase text-amber-700 dark:text-amber-200">
+                  <AlertTriangle className="h-4 w-4" />
+                  Proctoring Required
+                </p>
+                <h2 className="mt-2 text-2xl font-extrabold text-slate-950 dark:text-white">Secure mode is not active</h2>
+                <p className="mt-2 text-sm font-bold text-slate-700 dark:text-slate-200">
+                  Camera access and fullscreen mode are required before questions are shown.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleStartExam}
+                disabled={isSecuringExam}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 text-sm font-extrabold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-sky-400 dark:text-slate-950"
+              >
+                <ShieldCheck className="h-4 w-4" />
+                {isSecuringExam ? "Securing..." : "Enable Camera & Fullscreen"}
+              </button>
+            </div>
           ) : (
             <>
+              {proctorViolation ? (
+                <div className="mb-5 flex items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-extrabold text-rose-700 dark:border-rose-400/20 dark:bg-rose-400/10 dark:text-rose-200">
+                  <AlertTriangle className="h-5 w-5" />
+                  {proctorViolation}
+                </div>
+              ) : null}
+
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-extrabold text-slate-500 dark:text-slate-400">
                   Question {currentIndex + 1} of {questions.length}

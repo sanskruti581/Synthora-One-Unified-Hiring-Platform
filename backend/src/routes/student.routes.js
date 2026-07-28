@@ -242,6 +242,7 @@ router.get("/assessment/:driveId", requireStudent, async (req, res) => {
     examTime: drive.examTime,
     durationMinutes: drive.durationMinutes,
     assessmentStatus: student.assessmentStatus,
+    startedAt: student.startedAt,
     examStartAt: getExamStartDate(drive.examDate, drive.examTime),
     loginWindowOpenAt: getLoginWindowOpenAt(drive),
     canStartAssessment: new Date() >= getExamStartDate(drive.examDate, drive.examTime),

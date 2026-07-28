@@ -24,6 +24,7 @@ export type AssessmentData = {
   examTime: string;
   durationMinutes: number;
   assessmentStatus: string;
+  startedAt?: string;
   examStartAt: string;
   loginWindowOpenAt: string;
   canStartAssessment: boolean;
