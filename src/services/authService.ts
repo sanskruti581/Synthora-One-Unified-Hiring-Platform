@@ -59,6 +59,7 @@ export async function getStudentInvitation(token: string) {
     roundName: string;
     driveId: string;
     examStartAt: string;
+    examEndAt: string;
     loginWindowOpenAt: string;
     canLogin: boolean;
     canStartAssessment: boolean;

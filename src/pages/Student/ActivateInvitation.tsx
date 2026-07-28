@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useEffect, useState, type ComponentType } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowRight, BriefcaseBusiness, Building2, CalendarDays, Clock3, ShieldCheck, Timer } from "lucide-react";
 import AuthLayout from "../../layouts/AuthLayout";
@@ -21,6 +21,7 @@ type InvitationDetails = {
   canLogin: boolean;
   loginWindowOpenAt: string;
   examStartAt: string;
+  examEndAt: string;
   loginCountdownSeconds: number;
 };
 
@@ -55,13 +56,8 @@ export default function ActivateInvitation() {
     }
   };
 
-  const canLoginNow = useMemo(() => {
-    if (!details) {
-      return false;
-    }
-
-    return loginCountdown.days === 0 && loginCountdown.hours === 0 && loginCountdown.minutes === 0 && loginCountdown.seconds === 0;
-  }, [details, loginCountdown]);
+  const canLoginNow = Boolean(details?.canLogin);
+  const isClosed = details?.status === "Closed" || details?.status === "Completed";
 
   return (
     <AuthLayout
@@ -98,6 +94,7 @@ export default function ActivateInvitation() {
               <InviteTile icon={CalendarDays} label="Exam Date" value={details.examDate} />
               <InviteTile icon={Clock3} label="Exam Time" value={details.examTime} />
               <InviteTile icon={Timer} label="Duration" value={`${details.durationMinutes} minutes`} />
+              <InviteTile icon={Clock3} label="Closes At" value={formatTime(details.examEndAt)} />
               <InviteTile icon={ShieldCheck} label="Status" value={details.status || "Ready to Begin"} />
             </div>
 
@@ -105,8 +102,9 @@ export default function ActivateInvitation() {
               <p className="text-xs font-extrabold uppercase text-slate-500 dark:text-slate-400">Instructions</p>
               <ul className="mt-3 space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200">
                 <li>Stable Internet Connection</li>
-                <li>Camera should remain ON (future feature)</li>
-                <li>Do not refresh page</li>
+                <li>Camera must remain ON</li>
+                <li>Fullscreen mode is required</li>
+                <li>Do not refresh page or switch tabs</li>
                 <li>Timer cannot be paused</li>
               </ul>
             </div>
@@ -122,10 +120,16 @@ export default function ActivateInvitation() {
             <button
               type="button"
               onClick={handleStartAssessment}
-              disabled={isLoading || !canLoginNow || details.status === "Completed"}
+              disabled={isLoading || !canLoginNow || isClosed}
               className="inline-flex h-14 items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 text-sm font-extrabold text-white shadow-lg shadow-slate-900/15 transition hover:-translate-y-0.5 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-sky-400 dark:text-slate-950"
             >
-              {isLoading ? "Starting..." : canLoginNow ? "Start Assessment" : `Assessment Starts In ${formatCountdown(loginCountdown)}`}
+              {isLoading
+                ? "Starting..."
+                : isClosed
+                  ? details.status
+                  : canLoginNow
+                    ? "Start Assessment"
+                    : `Login Opens In ${formatCountdown(loginCountdown)}`}
               <ArrowRight className="h-5 w-5" />
             </button>
           </div>
@@ -133,6 +137,10 @@ export default function ActivateInvitation() {
       </div>
     </AuthLayout>
   );
+}
+
+function formatTime(value: string) {
+  return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 function InviteTile({ icon: Icon, label, value }: { icon: ComponentType<{ className?: string }>; label: string; value: string }) {

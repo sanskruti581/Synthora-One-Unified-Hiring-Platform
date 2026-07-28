@@ -27,6 +27,10 @@ function getLoginWindowOpenAt(drive) {
   return new Date(getExamStartDate(drive.examDate, drive.examTime).getTime() - 10 * 60 * 1000);
 }
 
+function getExamEndDate(drive) {
+  return new Date(getExamStartDate(drive.examDate, drive.examTime).getTime() + Number(drive.durationMinutes) * 60 * 1000);
+}
+
 function getCountdownSeconds(targetDate) {
   return Math.max(0, Math.ceil((new Date(targetDate).getTime() - Date.now()) / 1000));
 }
@@ -41,6 +45,7 @@ router.get("/invite/:token", async (req, res) => {
   const { invitation, student, drive, company } = payload;
   const now = new Date();
   const examStartAt = getExamStartDate(drive.examDate, drive.examTime);
+  const examEndAt = getExamEndDate(drive);
   const loginWindowOpenAt = getLoginWindowOpenAt(drive);
 
   if (now > invitation.expiresAt && invitation.invitationStatus !== "Activated") {
@@ -62,7 +67,9 @@ router.get("/invite/:token", async (req, res) => {
     durationMinutes: drive.durationMinutes,
     status:
       invitation.assessmentStatus === "Completed"
-        ? "Completed"
+          ? "Completed"
+        : now >= examEndAt
+          ? "Closed"
         : now < loginWindowOpenAt
           ? "Login Window Closed"
           : invitation.assessmentStatus === "Started"
@@ -71,9 +78,10 @@ router.get("/invite/:token", async (req, res) => {
     roundName: invitation.currentRound || "Aptitude",
     driveId: drive._id,
     examStartAt,
+    examEndAt,
     loginWindowOpenAt,
-    canLogin: now >= loginWindowOpenAt && now < examStartAt,
-    canStartAssessment: now >= examStartAt,
+    canLogin: now >= loginWindowOpenAt && now < examEndAt,
+    canStartAssessment: now >= examStartAt && now < examEndAt,
     loginCountdownSeconds: getCountdownSeconds(loginWindowOpenAt),
     examCountdownSeconds: getCountdownSeconds(examStartAt),
     activationOpenAt: invitation.activationOpenAt,
@@ -205,6 +213,7 @@ router.get("/me/dashboard", requireStudent, async (req, res) => {
   res.json({
     companyName: company.companyName,
     driveName: drive.driveName,
+    driveId: drive._id,
     jobRole: drive.jobRole,
     examDate: drive.examDate,
     examTime: drive.examTime,
@@ -213,6 +222,8 @@ router.get("/me/dashboard", requireStudent, async (req, res) => {
     assessmentStatus: student.assessmentStatus,
     startedAt: student.startedAt,
     completedAt: student.completedAt,
+    examStartAt: getExamStartDate(drive.examDate, drive.examTime),
+    examEndAt: getExamEndDate(drive),
     currentRound: student.currentRound,
     score: student.score,
     result: student.result,
@@ -244,8 +255,9 @@ router.get("/assessment/:driveId", requireStudent, async (req, res) => {
     assessmentStatus: student.assessmentStatus,
     startedAt: student.startedAt,
     examStartAt: getExamStartDate(drive.examDate, drive.examTime),
+    examEndAt: getExamEndDate(drive),
     loginWindowOpenAt: getLoginWindowOpenAt(drive),
-    canStartAssessment: new Date() >= getExamStartDate(drive.examDate, drive.examTime),
+    canStartAssessment: new Date() >= getExamStartDate(drive.examDate, drive.examTime) && new Date() < getExamEndDate(drive),
     answers: student.answers instanceof Map ? Object.fromEntries(student.answers) : (student.answers || {}),
   });
 });
@@ -265,6 +277,7 @@ router.post("/assessment/start", requireStudent, async (req, res) => {
 
   const now = new Date();
   const examStartAt = getExamStartDate(drive.examDate, drive.examTime);
+  const examEndAt = getExamEndDate(drive);
 
   if (now < examStartAt) {
     return res.status(403).json({
@@ -272,6 +285,10 @@ router.post("/assessment/start", requireStudent, async (req, res) => {
       examStartAt,
       startCountdownSeconds: getCountdownSeconds(examStartAt),
     });
+  }
+
+  if (now >= examEndAt) {
+    return res.status(403).json({ message: "Assessment window is closed", examStartAt, examEndAt });
   }
 
   student.assessmentStatus = "Started";
@@ -302,6 +319,7 @@ router.post("/assessment/:driveId/start", requireStudent, async (req, res) => {
 
   const now = new Date();
   const examStartAt = getExamStartDate(drive.examDate, drive.examTime);
+  const examEndAt = getExamEndDate(drive);
 
   if (now < examStartAt) {
     return res.status(403).json({
@@ -309,6 +327,10 @@ router.post("/assessment/:driveId/start", requireStudent, async (req, res) => {
       examStartAt,
       startCountdownSeconds: getCountdownSeconds(examStartAt),
     });
+  }
+
+  if (now >= examEndAt) {
+    return res.status(403).json({ message: "Assessment window is closed", examStartAt, examEndAt });
   }
 
   student.assessmentStatus = "Started";

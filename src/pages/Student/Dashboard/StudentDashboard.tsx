@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { PlayCircle, CalendarDays, Clock3, Building2, BriefcaseBusiness } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { PlayCircle, CalendarDays, Clock3, Building2, BriefcaseBusiness, CheckCircle2, LockKeyhole } from "lucide-react";
 import { motion } from "framer-motion";
 import ThemeToggle from "../../../components/ThemeToggle";
 import { useCountdown } from "../../../hooks/useCountdown";
@@ -7,10 +8,21 @@ import { getStudentDashboard, startStudentAssessment, type StudentDashboardData 
 import logo from "../../../../images/logo.png";
 
 export default function StudentDashboard() {
+  const navigate = useNavigate();
   const [assessment, setAssessment] = useState<StudentDashboardData | null>(null);
   const [message, setMessage] = useState("");
-  const countdown = useCountdown(assessment ? `${assessment.examDate}T${assessment.examTime}:00` : new Date().toISOString());
-  const canStartNow = countdown.days === 0 && countdown.hours === 0 && countdown.minutes === 0 && countdown.seconds === 0;
+  const examStartAt = assessment?.examStartAt ?? (assessment ? `${assessment.examDate}T${assessment.examTime}:00` : new Date().toISOString());
+  const examEndAt = assessment?.examEndAt ?? (assessment ? new Date(new Date(examStartAt).getTime() + Number(assessment.durationMinutes) * 60 * 1000).toISOString() : new Date().toISOString());
+  const countdown = useCountdown(examStartAt);
+  const now = Date.now();
+  const isCompleted = assessment?.assessmentStatus === "Completed";
+  const isStarted = assessment?.assessmentStatus === "Started";
+  const isClosed = Boolean(assessment && !isCompleted && now >= new Date(examEndAt).getTime());
+  const canStartNow =
+    Boolean(assessment) &&
+    assessment?.assessmentStatus === "Logged In" &&
+    now >= new Date(examStartAt).getTime() &&
+    now < new Date(examEndAt).getTime();
 
   useEffect(() => {
     getStudentDashboard()
@@ -19,12 +31,18 @@ export default function StudentDashboard() {
   }, []);
 
   const handleStart = async () => {
+    if (assessment?.assessmentStatus === "Started" && assessment.driveId) {
+      navigate(`/assessment/${assessment.driveId}`);
+      return;
+    }
+
     try {
       await startStudentAssessment();
       const response = await getStudentDashboard();
       setAssessment(response.data);
+      navigate(`/assessment/${response.data.driveId}`);
     } catch {
-      setMessage("The assessment can only start at the official exam time.");
+      setMessage("The assessment can only start during the official exam window.");
     }
   };
 
@@ -58,6 +76,7 @@ export default function StudentDashboard() {
             <InfoTile icon={BriefcaseBusiness} label="Drive Name" value={assessment?.driveName ?? "-"} />
             <InfoTile icon={CalendarDays} label="Exam Date" value={assessment?.examDate ?? "-"} />
             <InfoTile icon={Clock3} label="Exam Time" value={assessment?.examTime ?? "-"} />
+            <InfoTile icon={LockKeyhole} label="Closes At" value={assessment ? formatTime(examEndAt) : "-"} />
           </div>
 
           <div className="mt-6 rounded-2xl bg-slate-950 p-5 text-white dark:bg-white dark:text-slate-950">
@@ -70,30 +89,60 @@ export default function StudentDashboard() {
             </div>
           </div>
 
-          <div className="mt-6 flex flex-col justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-white/10 dark:bg-white/5 sm:flex-row sm:items-center">
+          <div className={`mt-6 flex flex-col justify-between gap-4 rounded-2xl border p-5 sm:flex-row sm:items-center ${
+            isCompleted
+              ? "border-emerald-200 bg-emerald-50 dark:border-emerald-400/20 dark:bg-emerald-400/10"
+              : isClosed
+                ? "border-rose-200 bg-rose-50 dark:border-rose-400/20 dark:bg-rose-400/10"
+                : "border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-white/5"
+          }`}>
             <div>
               <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Assessment Status</p>
-              <p className="mt-1 text-2xl font-extrabold text-slate-950 dark:text-white">{assessment?.assessmentStatus ?? "Pending"}</p>
+              <p className="mt-1 text-2xl font-extrabold text-slate-950 dark:text-white">
+                {isClosed ? "Closed" : assessment?.assessmentStatus ?? "Pending"}
+              </p>
+              {isCompleted ? (
+                <p className="mt-2 text-sm font-bold text-emerald-700 dark:text-emerald-200">Your assessment has been submitted successfully.</p>
+              ) : null}
+              {isClosed ? (
+                <p className="mt-2 text-sm font-bold text-rose-700 dark:text-rose-200">The assessment window closed at {formatTime(examEndAt)}.</p>
+              ) : null}
               {message ? <p className="mt-2 text-sm font-semibold text-rose-600">{message}</p> : null}
             </div>
-            <button
-              type="button"
-              onClick={handleStart}
-              disabled={!assessment || assessment.assessmentStatus !== "Logged In" || !canStartNow}
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-sky-500 px-5 text-sm font-extrabold text-white shadow-lg shadow-sky-500/20 transition hover:-translate-y-0.5 hover:bg-sky-600"
-            >
-              <PlayCircle className="h-5 w-5" />
-              {assessment?.assessmentStatus === "Started"
-                ? "Assessment Started"
-                : canStartNow
-                  ? "Start Aptitude Assessment"
-                  : `Starts in ${formatCountdown(countdown)}`}
-            </button>
+            {isCompleted ? (
+              <div className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-extrabold text-white">
+                <CheckCircle2 className="h-5 w-5" />
+                Completed
+              </div>
+            ) : isClosed ? (
+              <div className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-rose-600 px-5 text-sm font-extrabold text-white">
+                <LockKeyhole className="h-5 w-5" />
+                Window Closed
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleStart}
+                disabled={!assessment || (!isStarted && !canStartNow)}
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-sky-500 px-5 text-sm font-extrabold text-white shadow-lg shadow-sky-500/20 transition hover:-translate-y-0.5 hover:bg-sky-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <PlayCircle className="h-5 w-5" />
+                {isStarted
+                  ? "Continue Assessment"
+                  : canStartNow
+                    ? "Start Aptitude Assessment"
+                    : `Starts in ${formatCountdown(countdown)}`}
+              </button>
+            )}
           </div>
         </motion.div>
       </section>
     </main>
   );
+}
+
+function formatTime(value: string) {
+  return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 function InfoTile({ icon: Icon, label, value }: { icon: typeof Building2; label: string; value: string }) {

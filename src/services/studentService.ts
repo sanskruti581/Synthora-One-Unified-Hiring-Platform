@@ -3,10 +3,13 @@ import api from "./api";
 export type StudentDashboardData = {
   companyName: string;
   driveName: string;
+  driveId: string;
   jobRole: string;
   examDate: string;
   examTime: string;
   durationMinutes: number;
+  examStartAt?: string;
+  examEndAt?: string;
   rounds: string[];
   assessmentStatus: string;
   startedAt?: string;
@@ -26,6 +29,7 @@ export type AssessmentData = {
   assessmentStatus: string;
   startedAt?: string;
   examStartAt: string;
+  examEndAt?: string;
   loginWindowOpenAt: string;
   canStartAssessment: boolean;
   answers: Record<string, string>;

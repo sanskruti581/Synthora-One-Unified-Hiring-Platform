@@ -52,6 +52,7 @@ export default function Assessment() {
   const [proctorViolation, setProctorViolation] = useState("");
   const [isSecuringExam, setIsSecuringExam] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(Boolean(document.fullscreenElement));
+  const [isProctorArmed, setIsProctorArmed] = useState(false);
   const hasSubmittedRef = useRef(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const examEndAt = useMemo(() => {
@@ -84,10 +85,11 @@ export default function Assessment() {
   }, [driveId]);
 
   useEffect(() => {
-    if (videoRef.current && cameraStream) {
+    if (videoRef.current && cameraStream && videoRef.current.srcObject !== cameraStream) {
       videoRef.current.srcObject = cameraStream;
+      videoRef.current.play().catch(() => undefined);
     }
-  }, [cameraStream]);
+  });
 
   useEffect(() => {
     const handleFullscreenState = () => setIsFullscreen(Boolean(document.fullscreenElement));
@@ -101,6 +103,16 @@ export default function Assessment() {
       cameraStream?.getTracks().forEach((track) => track.stop());
     };
   }, [cameraStream]);
+
+  useEffect(() => {
+    if (!hasStartedExam || !proctorReady) {
+      setIsProctorArmed(false);
+      return;
+    }
+
+    const timeout = window.setTimeout(() => setIsProctorArmed(true), 3000);
+    return () => window.clearTimeout(timeout);
+  }, [hasStartedExam, proctorReady]);
 
   useEffect(() => {
     if (!assessment || !hasStartedExam) {
@@ -147,15 +159,15 @@ export default function Assessment() {
   }, [answers, navigate, score]);
 
   const handleProctorViolation = useCallback((reason: string) => {
-    if (!hasStartedExam || !proctorReady || hasSubmittedRef.current) {
+    if (!hasStartedExam || !proctorReady || !isProctorArmed || hasSubmittedRef.current) {
       return;
     }
 
     void submitNow(reason);
-  }, [hasStartedExam, proctorReady, submitNow]);
+  }, [hasStartedExam, isProctorArmed, proctorReady, submitNow]);
 
   useEffect(() => {
-    if (!hasStartedExam || !proctorReady) {
+    if (!hasStartedExam || !proctorReady || !isProctorArmed) {
       return;
     }
 
@@ -165,7 +177,6 @@ export default function Assessment() {
       }
     };
 
-    const handleBlur = () => handleProctorViolation("Leaving the assessment window is not allowed.");
     const handleFullscreenChange = () => {
       if (!document.fullscreenElement) {
         handleProctorViolation("Fullscreen mode was exited.");
@@ -180,26 +191,21 @@ export default function Assessment() {
     document.addEventListener("visibilitychange", handleVisibilityChange);
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     document.addEventListener("contextmenu", handleContextMenu);
-    window.addEventListener("blur", handleBlur);
     window.addEventListener("beforeunload", handleBeforeUnload);
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
       document.removeEventListener("contextmenu", handleContextMenu);
-      window.removeEventListener("blur", handleBlur);
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
-  }, [handleProctorViolation, hasStartedExam, proctorReady]);
+  }, [handleProctorViolation, hasStartedExam, isProctorArmed, proctorReady]);
 
   useEffect(() => {
     const timeIsOver =
       hasStartedExam &&
       examEndAt &&
-      examCountdown.days === 0 &&
-      examCountdown.hours === 0 &&
-      examCountdown.minutes === 0 &&
-      examCountdown.seconds === 0;
+      Date.now() >= new Date(examEndAt).getTime();
 
     if (timeIsOver) {
       void submitNow("Time is over.");
@@ -240,7 +246,7 @@ export default function Assessment() {
         return;
       }
 
-      setMessage("The assessment can only start at the official exam time and requires camera plus fullscreen access.");
+      setMessage("The assessment can only start during the official exam window and requires camera plus fullscreen access.");
     } finally {
       setIsSecuringExam(false);
     }
