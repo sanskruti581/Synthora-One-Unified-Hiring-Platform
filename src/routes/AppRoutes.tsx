@@ -8,6 +8,7 @@ import DriveDetails from "../pages/Company/DriveDetails/DriveDetails";
 import StudentDashboard from "../pages/Student/Dashboard/StudentDashboard";
 import ActivateInvitation from "../pages/Student/ActivateInvitation";
 import Assessment from "../pages/Student/Assessment";
+import CodingAssessment from "../pages/Student/CodingAssessment";
 import AssessmentDemo from "../pages/AssessmentDemo";
 
 export default function AppRoutes() {
@@ -24,6 +25,7 @@ export default function AppRoutes() {
       <Route path="/student/activate/:token" element={<ActivateInvitation />} />
       <Route path="/student/dashboard" element={<StudentDashboard />} />
       <Route path="/assessment/:driveId" element={<Assessment />} />
+      <Route path="/coding/:driveId" element={<CodingAssessment />} />
       <Route path="/assessment-demo" element={<AssessmentDemo />} />
     </Routes>
   );

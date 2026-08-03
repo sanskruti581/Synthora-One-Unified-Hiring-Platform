@@ -24,6 +24,12 @@ const hiringDriveSchema = new mongoose.Schema(
     aptitudeCutoff: { type: Number, required: true },
     lastRegistrationDate: { type: String, required: true },
     status: { type: String, default: "Scheduled" },
+    codingCutoff: { type: Number, default: 0 },
+    codingDurationMinutes: { type: Number, default: 45 },
+    scoringWeights: {
+      aptitude: { type: Number, default: 40 },
+      coding: { type: Number, default: 60 },
+    },
   },
   { timestamps: true },
 );
