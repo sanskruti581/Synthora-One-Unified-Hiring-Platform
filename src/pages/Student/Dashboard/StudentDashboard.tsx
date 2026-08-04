@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { PlayCircle, CalendarDays, Clock3, Building2, BriefcaseBusiness, CheckCircle2, LockKeyhole } from "lucide-react";
 import { motion } from "framer-motion";
@@ -11,18 +11,20 @@ export default function StudentDashboard() {
   const navigate = useNavigate();
   const [assessment, setAssessment] = useState<StudentDashboardData | null>(null);
   const [message, setMessage] = useState("");
+  const assessmentStatus = assessment?.assessmentStatus ?? "Pending";
   const examStartAt = assessment?.examStartAt ?? (assessment ? `${assessment.examDate}T${assessment.examTime}:00` : new Date().toISOString());
   const examEndAt = assessment?.examEndAt ?? (assessment ? new Date(new Date(examStartAt).getTime() + Number(assessment.durationMinutes) * 60 * 1000).toISOString() : new Date().toISOString());
   const countdown = useCountdown(examStartAt);
   const now = Date.now();
-  const isCompleted = assessment?.assessmentStatus === "Completed";
-  const isStarted = assessment?.assessmentStatus === "Started";
+  const isCompleted = assessmentStatus.toLowerCase() === "completed";
+  const isStarted = ["started", "in_progress", "in progress", "in-progress"].includes(assessmentStatus.toLowerCase());
   const isClosed = Boolean(assessment && !isCompleted && now >= new Date(examEndAt).getTime());
   const canStartNow =
     Boolean(assessment) &&
     assessment?.assessmentStatus === "Logged In" &&
     now >= new Date(examStartAt).getTime() &&
     now < new Date(examEndAt).getTime();
+  const heading = useMemo(() => getDashboardHeading(assessmentStatus), [assessmentStatus]);
 
   useEffect(() => {
     getStudentDashboard()
@@ -59,10 +61,8 @@ export default function StudentDashboard() {
       <section className="mx-auto grid min-h-[calc(100vh-96px)] max-w-6xl items-center gap-8 py-10 lg:grid-cols-[0.95fr_1.05fr]">
         <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }}>
           <p className="mb-4 text-sm font-extrabold uppercase tracking-[0.18em] text-sky-600 dark:text-sky-300">Student dashboard</p>
-          <h1 className="text-4xl font-extrabold leading-tight text-slate-950 dark:text-white md:text-5xl">Your invited assessment is ready.</h1>
-          <p className="mt-5 max-w-xl text-base leading-8 text-slate-600 dark:text-slate-300">
-            Review the drive details, keep an eye on the countdown, and start the active round when your assessment window opens.
-          </p>
+          <h1 className="text-4xl font-extrabold leading-tight text-slate-950 dark:text-white md:text-5xl">{heading.title}</h1>
+          <p className="mt-5 max-w-xl text-base leading-8 text-slate-600 dark:text-slate-300">{heading.subtitle}</p>
         </motion.div>
 
         <motion.div
@@ -139,6 +139,29 @@ export default function StudentDashboard() {
       </section>
     </main>
   );
+}
+
+function getDashboardHeading(status: string) {
+  const normalized = status?.trim().toLowerCase();
+
+  if (normalized === "completed") {
+    return {
+      title: "Your invited assessment is completed.",
+      subtitle: "You have successfully submitted your assessment.",
+    };
+  }
+
+  if (["started", "in_progress", "in progress", "in-progress"].includes(normalized)) {
+    return {
+      title: "Your assessment is in progress.",
+      subtitle: "Your assessment is currently running. Continue from where you left off.",
+    };
+  }
+
+  return {
+    title: "Your invited assessment is ready.",
+    subtitle: "Review the drive details, keep an eye on the countdown, and start the active round when your assessment window opens.",
+  };
 }
 
 function formatTime(value: string) {

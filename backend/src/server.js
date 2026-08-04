@@ -9,6 +9,7 @@ import authRoutes from "./routes/auth.routes.js";
 import companyRoutes from "./routes/company.routes.js";
 import driveRoutes from "./routes/drive.routes.js";
 import studentRoutes from "./routes/student.routes.js";
+import proctoringRoutes from "./routes/proctoring.routes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -30,6 +31,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/companies", companyRoutes);
 app.use("/api/company/drives", driveRoutes);
 app.use("/api/students", studentRoutes);
+app.use("/api/proctoring", proctoringRoutes);
 
 async function startServer() {
   try {

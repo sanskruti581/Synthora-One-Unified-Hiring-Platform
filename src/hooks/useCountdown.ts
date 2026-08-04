@@ -19,7 +19,13 @@ export function useCountdown(targetDate: string) {
     setRemaining(getRemainingTime(targetDate));
 
     const interval = window.setInterval(() => {
-      setRemaining(getRemainingTime(targetDate));
+      setRemaining((current) => {
+        if (current.days === 0 && current.hours === 0 && current.minutes === 0 && current.seconds === 0) {
+          return current;
+        }
+
+        return getRemainingTime(targetDate);
+      });
     }, 1000);
 
     return () => window.clearInterval(interval);
