@@ -33,6 +33,10 @@ export default function StudentDashboard() {
   }, []);
 
   const handleStart = async () => {
+    if (assessment?.currentRound === "Coding" && assessment?.assessmentStatus === "Started" && assessment.driveId) {
+      navigate(`/coding/${assessment.driveId}`);
+      return;
+    }
     if (assessment?.assessmentStatus === "Started" && assessment.driveId) {
       navigate(`/assessment/${assessment.driveId}`);
       return;
@@ -42,7 +46,11 @@ export default function StudentDashboard() {
       await startStudentAssessment();
       const response = await getStudentDashboard();
       setAssessment(response.data);
-      navigate(`/assessment/${response.data.driveId}`);
+      if (response.data.currentRound === "Coding") {
+        navigate(`/coding/${response.data.driveId}`);
+      } else {
+        navigate(`/assessment/${response.data.driveId}`);
+      }
     } catch {
       setMessage("The assessment can only start during the official exam window.");
     }
@@ -89,6 +97,44 @@ export default function StudentDashboard() {
             </div>
           </div>
 
+          {assessment?.rounds && assessment.rounds.length > 0 && (
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-white/10 dark:bg-white/5">
+              <p className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-4">Assessment Pipeline</p>
+              <div className="flex flex-col gap-3">
+                {assessment.rounds.map((round, index) => {
+                  const result = assessment.roundResults?.find(r => r.roundName === round);
+                  const isCurrent = assessment.currentRound === round;
+                  
+                  return (
+                    <div key={round} className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-3">
+                        {result?.status === "Completed" ? (
+                          <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                        ) : isCurrent ? (
+                          <PlayCircle className="w-5 h-5 text-sky-500" />
+                        ) : (
+                          <LockKeyhole className="w-5 h-5 text-slate-400" />
+                        )}
+                        <span className={`font-bold ${
+                          result?.status === "Completed" ? "text-emerald-700 dark:text-emerald-400" :
+                          isCurrent ? "text-sky-700 dark:text-sky-400" :
+                          "text-slate-500 dark:text-slate-400"
+                        }`}>
+                          {round}
+                        </span>
+                      </div>
+                      <div className="text-slate-500 dark:text-slate-400">
+                        {result?.status === "Completed" ? `(completed, score: ${result.score ?? "-"})` :
+                         isCurrent ? "(current round)" :
+                         "(locked)"}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className={`mt-6 flex flex-col justify-between gap-4 rounded-2xl border p-5 sm:flex-row sm:items-center ${
             isCompleted
               ? "border-emerald-200 bg-emerald-50 dark:border-emerald-400/20 dark:bg-emerald-400/10"
@@ -128,9 +174,9 @@ export default function StudentDashboard() {
               >
                 <PlayCircle className="h-5 w-5" />
                 {isStarted
-                  ? "Continue Assessment"
+                  ? `Continue ${assessment?.currentRound === "Coding" ? "Coding Round" : "Assessment"}`
                   : canStartNow
-                    ? "Start Aptitude Assessment"
+                    ? `Start ${assessment?.currentRound === "Coding" ? "Coding Round" : "Aptitude Assessment"}`
                     : `Starts in ${formatCountdown(countdown)}`}
               </button>
             )}

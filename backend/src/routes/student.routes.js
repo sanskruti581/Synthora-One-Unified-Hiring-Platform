@@ -6,6 +6,7 @@ import Company from "../models/Company.js";
 import { requireStudent } from "../middleware/auth.js";
 import jwt from "jsonwebtoken";
 import { getExamStartDate } from "../utils/tokens.js";
+import { getNextRound, normalizeRoundName, calculateOverallScore, determineFinalResult } from "../utils/roundUtils.js";
 
 const router = Router();
 
@@ -166,12 +167,8 @@ router.post("/activate/:token", async (req, res) => {
   }
 
   const now = new Date();
-  if (now < invitation.activationOpenAt) {
-    return res.status(403).json({
-      message: "This link opens 10 minutes before the exam starts",
-      activationOpenAt: invitation.activationOpenAt,
-    });
-  }
+  // Removed: login-window restriction that blocked activation until 10 min before exam.
+  // Students may activate their invitation as soon as the link is valid.
 
   if (now > invitation.expiresAt) {
     invitation.invitationStatus = "Expired";
@@ -227,6 +224,10 @@ router.get("/me/dashboard", requireStudent, async (req, res) => {
     currentRound: student.currentRound,
     score: student.score,
     result: student.result,
+    roundResults: student.roundResults,
+    aptitudeScore: student.aptitudeScore,
+    codingScore: student.codingScore,
+    overallScore: student.overallScore,
   });
 });
 
@@ -256,9 +257,11 @@ router.get("/assessment/:driveId", requireStudent, async (req, res) => {
     startedAt: student.startedAt,
     examStartAt: getExamStartDate(drive.examDate, drive.examTime),
     examEndAt: getExamEndDate(drive),
-    loginWindowOpenAt: getLoginWindowOpenAt(drive),
     canStartAssessment: new Date() >= getExamStartDate(drive.examDate, drive.examTime) && new Date() < getExamEndDate(drive),
     answers: student.answers instanceof Map ? Object.fromEntries(student.answers) : (student.answers || {}),
+    rounds: drive.rounds,
+    currentRound: student.currentRound,
+    roundResults: student.roundResults,
   });
 });
 
@@ -385,22 +388,53 @@ router.post("/assessment/complete", requireStudent, async (req, res) => {
 
   const answers = req.body.answers && typeof req.body.answers === "object" ? req.body.answers : {};
   const score = Number(req.body.score ?? 0);
-  const result = score >= Number(drive.aptitudeCutoff) ? "Qualified" : "Rejected";
   const completedAt = new Date();
 
-  student.assessmentStatus = "Completed";
-  student.completedAt = completedAt;
+  // Save basic aptitude info for backward compatibility
   student.answers = answers;
   student.score = score;
-  student.result = result;
-  await student.save();
+  student.aptitudeScore = score;
 
-  await Invitation.findOneAndUpdate(
-    { student: student._id, drive: student.drive },
-    { assessmentStatus: "Completed", completedAt, answers, score, result },
-  );
+  // Add round result for Aptitude
+  student.roundResults = (student.roundResults || []).filter(r => normalizeRoundName(r.roundName) !== "Aptitude");
+  student.roundResults.push({
+    roundName: "Aptitude",
+    status: "Completed",
+    score: score,
+    maxScore: (Object.keys(answers).length || 0) * 20, // each aptitude question is worth 20 points
+    completedAt: completedAt
+  });
 
-  res.json({ message: "Assessment result stored", score, result, completedAt });
+  const nextRound = getNextRound(drive, "Aptitude");
+
+  if (nextRound) {
+    student.currentRound = nextRound;
+    // Do not mark as completed yet
+    await student.save();
+
+    await Invitation.findOneAndUpdate(
+      { student: student._id, drive: student.drive },
+      { answers, score }
+    );
+
+    res.json({ message: "Aptitude round completed", nextRound });
+  } else {
+    // Determine final result
+    const result = score >= Number(drive.aptitudeCutoff) ? "Qualified" : "Rejected";
+
+    student.assessmentStatus = "Completed";
+    student.completedAt = completedAt;
+    student.result = result;
+    student.overallScore = calculateOverallScore(drive, student);
+    await student.save();
+
+    await Invitation.findOneAndUpdate(
+      { student: student._id, drive: student.drive },
+      { assessmentStatus: "Completed", completedAt, answers, score, result },
+    );
+
+    res.json({ message: "Assessment result stored", score, result, completedAt });
+  }
 });
 
 export default router;
