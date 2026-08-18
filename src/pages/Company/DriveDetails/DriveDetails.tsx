@@ -11,7 +11,7 @@ import {
   type HiringDrive,
 } from "../../../services/driveService";
 
-const filters = ["All Students", "Pending", "Completed", "Qualified", "Rejected"] as const;
+const filters = ["All Students", "Pending", "In Progress", "Aptitude Completed", "Coding Completed", "Completed", "Qualified", "Rejected"] as const;
 
 const emptyStats: DriveStats = {
   studentsInvited: 0,
@@ -55,18 +55,12 @@ export default function DriveDetails() {
   }, [driveId]);
 
   const visibleStudents = useMemo(() => {
-    if (filter === "All Students") {
-      return students;
-    }
-
-    if (filter === "Pending") {
-      return students.filter((student) => student.assessmentStatus !== "Completed");
-    }
-
-    if (filter === "Completed") {
-      return students.filter((student) => student.assessmentStatus === "Completed");
-    }
-
+    if (filter === "All Students") return students;
+    if (filter === "Pending") return students.filter((student) => student.assessmentStatus !== "Completed");
+    if (filter === "In Progress") return students.filter((student) => student.assessmentStatus === "Started" || student.assessmentStatus === "In Progress");
+    if (filter === "Aptitude Completed") return students.filter(s => s.roundResults?.some(r => r.roundName === "Aptitude" && r.status === "Completed"));
+    if (filter === "Coding Completed") return students.filter(s => s.roundResults?.some(r => r.roundName === "Coding" && r.status === "Completed"));
+    if (filter === "Completed") return students.filter((student) => student.assessmentStatus === "Completed");
     return students.filter((student) => student.result === filter);
   }, [filter, students]);
 
@@ -195,7 +189,7 @@ export default function DriveDetails() {
             <table className="min-w-[1040px] w-full text-left text-sm">
               <thead className="bg-blue-50/80 text-xs uppercase text-synthora-muted">
                 <tr>
-                  {["Student Name", "Email", "Invitation Status", "Email Sent", "Assessment Status", "Started Time", "Completed Time", "Score", "Qualified / Rejected"].map((heading) => (
+                  {["Student Name", "Email", "Invitation Status", "Email Sent", "Current Round", "Assessment Status", "Started Time", "Completed Time", "Aptitude Score", "Coding Score", "Overall Score", "Qualified / Rejected"].map((heading) => (
                     <th key={heading} className="px-4 py-3 font-extrabold">
                       {heading}
                     </th>
@@ -209,10 +203,13 @@ export default function DriveDetails() {
                     <td className="px-4 py-3 text-synthora-muted">{student.email}</td>
                     <td className="px-4 py-3">{student.invitationStatus}</td>
                     <td className="px-4 py-3">{student.emailSent ? "Sent" : student.emailSentStatus}</td>
+                    <td className="px-4 py-3">{student.currentRound ?? "-"}</td>
                     <td className="px-4 py-3">{student.assessmentStatus}</td>
                     <td className="px-4 py-3">{formatDate(student.startedAt)}</td>
                     <td className="px-4 py-3">{formatDate(student.completedAt)}</td>
-                    <td className="px-4 py-3">{student.score ?? "-"}</td>
+                    <td className="px-4 py-3">{student.aptitudeScore ?? student.score ?? "-"}</td>
+                    <td className="px-4 py-3">{student.codingScore ?? "-"}</td>
+                    <td className="px-4 py-3">{student.overallScore ?? "-"}</td>
                     <td className="px-4 py-3">{student.result}</td>
                   </tr>
                 ))}
