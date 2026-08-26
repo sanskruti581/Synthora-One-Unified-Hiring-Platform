@@ -5,7 +5,6 @@ import Company from "../models/Company.js";
 import Student from "../models/Student.js";
 import HiringDrive from "../models/HiringDrive.js";
 import Invitation from "../models/Invitation.js";
-import { getExamStartDate } from "../utils/tokens.js";
 
 const router = Router();
 
@@ -34,11 +33,8 @@ router.post("/login", async (req, res) => {
         return res.status(403).json({ message: "Student assessment drive is not available" });
       }
 
-      const loginOpenAt = new Date(getExamStartDate(drive.examDate, drive.examTime).getTime() - 10 * 60 * 1000);
-
-      if (!student.isActive || Date.now() < loginOpenAt.getTime()) {
-        return res.status(403).json({ message: "Student login opens 10 minutes before exam time" });
-      }
+      // Login is now always allowed for students with valid credentials.
+      // Assessment start is enforced separately by the assessment routes (examStartAt check).
 
       await Student.findByIdAndUpdate(student._id, { assessmentStatus: "Logged In", lastLogin: new Date() });
       await Invitation.findOneAndUpdate(

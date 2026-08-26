@@ -60,12 +60,9 @@ export async function getStudentInvitation(token: string) {
     driveId: string;
     examStartAt: string;
     examEndAt: string;
-    loginWindowOpenAt: string;
     canLogin: boolean;
     canStartAssessment: boolean;
-    loginCountdownSeconds: number;
     examCountdownSeconds: number;
-    activationOpenAt: string;
     expiresAt: string;
   }>(`/students/invite/${token}`);
 }
@@ -78,5 +75,8 @@ export async function startInvitationAssessment(token: string) {
     studentName: string;
     companyName: string;
     driveName: string;
+    examStartAt: string;
+    examEndAt: string;
+    canStartAssessment: boolean;
   }>(`/students/invite/${token}/start`);
 }

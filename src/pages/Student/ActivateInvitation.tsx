@@ -19,10 +19,10 @@ type InvitationDetails = {
   status: string;
   roundName: string;
   canLogin: boolean;
-  loginWindowOpenAt: string;
+  canStartAssessment: boolean;
   examStartAt: string;
   examEndAt: string;
-  loginCountdownSeconds: number;
+  examCountdownSeconds: number;
 };
 
 export default function ActivateInvitation() {
@@ -31,7 +31,7 @@ export default function ActivateInvitation() {
   const [details, setDetails] = useState<InvitationDetails | null>(null);
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const loginCountdown = useCountdown(details?.loginWindowOpenAt || new Date().toISOString());
+  const loginCountdown = useCountdown(details?.examStartAt || new Date().toISOString());
 
   useEffect(() => {
     getStudentInvitation(token)
@@ -50,14 +50,17 @@ export default function ActivateInvitation() {
       window.localStorage.setItem("synthora-token", response.data.token);
       navigate(`/assessment/${response.data.driveId}`);
     } catch (error) {
-      setMessage("The assessment login window has not opened yet.");
+      setMessage("Unable to log in. Your invitation may have expired or the assessment window is closed.");
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Login is allowed any time while the invitation is valid (not expired/closed).
   const canLoginNow = Boolean(details?.canLogin);
   const isClosed = details?.status === "Closed" || details?.status === "Completed";
+  // Show exam countdown when the student is logged in but the exam hasn't started yet.
+  const examNotStartedYet = !details?.canStartAssessment && !isClosed;
 
   return (
     <AuthLayout
@@ -124,12 +127,12 @@ export default function ActivateInvitation() {
               className="inline-flex h-14 items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 text-sm font-extrabold text-white shadow-lg shadow-slate-900/15 transition hover:-translate-y-0.5 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-sky-400 dark:text-slate-950"
             >
               {isLoading
-                ? "Starting..."
+                ? "Logging in..."
                 : isClosed
                   ? details.status
-                  : canLoginNow
-                    ? "Start Assessment"
-                    : `Login Opens In ${formatCountdown(loginCountdown)}`}
+                  : examNotStartedYet
+                    ? `Exam starts in ${formatCountdown(loginCountdown)} — Enter Waiting Room`
+                    : "Enter Assessment"}
               <ArrowRight className="h-5 w-5" />
             </button>
           </div>

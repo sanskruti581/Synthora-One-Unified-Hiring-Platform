@@ -24,9 +24,8 @@ async function getInvitationPayload(token) {
   return { invitation, student, drive, company };
 }
 
-function getLoginWindowOpenAt(drive) {
-  return new Date(getExamStartDate(drive.examDate, drive.examTime).getTime() - 10 * 60 * 1000);
-}
+// Login is no longer restricted to a 10-minute window before the exam.
+// Students may log in as soon as their invitation is valid.
 
 function getExamEndDate(drive) {
   return new Date(getExamStartDate(drive.examDate, drive.examTime).getTime() + Number(drive.durationMinutes) * 60 * 1000);
@@ -47,12 +46,16 @@ router.get("/invite/:token", async (req, res) => {
   const now = new Date();
   const examStartAt = getExamStartDate(drive.examDate, drive.examTime);
   const examEndAt = getExamEndDate(drive);
-  const loginWindowOpenAt = getLoginWindowOpenAt(drive);
 
   if (now > invitation.expiresAt && invitation.invitationStatus !== "Activated") {
     invitation.invitationStatus = "Expired";
     await invitation.save();
   }
+
+  // canLogin: students may log in any time before the exam window closes (or has expired)
+  const invitationExpired = now > invitation.expiresAt && invitation.invitationStatus !== "Activated";
+  const examClosed = now >= examEndAt;
+  const canLogin = !invitationExpired && !examClosed;
 
   return res.json({
     token: invitation.token,
@@ -68,11 +71,9 @@ router.get("/invite/:token", async (req, res) => {
     durationMinutes: drive.durationMinutes,
     status:
       invitation.assessmentStatus === "Completed"
-          ? "Completed"
-        : now >= examEndAt
+        ? "Completed"
+        : examClosed
           ? "Closed"
-        : now < loginWindowOpenAt
-          ? "Login Window Closed"
           : invitation.assessmentStatus === "Started"
             ? "Assessment Started"
             : "Ready to Begin",
@@ -80,12 +81,9 @@ router.get("/invite/:token", async (req, res) => {
     driveId: drive._id,
     examStartAt,
     examEndAt,
-    loginWindowOpenAt,
-    canLogin: now >= loginWindowOpenAt && now < examEndAt,
+    canLogin,
     canStartAssessment: now >= examStartAt && now < examEndAt,
-    loginCountdownSeconds: getCountdownSeconds(loginWindowOpenAt),
     examCountdownSeconds: getCountdownSeconds(examStartAt),
-    activationOpenAt: invitation.activationOpenAt,
     expiresAt: invitation.expiresAt,
   });
 });
@@ -100,22 +98,21 @@ router.post("/invite/:token/start", async (req, res) => {
   const { invitation, student, drive, company } = payload;
   const now = new Date();
   const examStartAt = getExamStartDate(drive.examDate, drive.examTime);
-  const loginWindowOpenAt = getLoginWindowOpenAt(drive);
+  const examEndAt = getExamEndDate(drive);
 
-  if (now > invitation.expiresAt) {
+  // Invitation expiry check (unchanged)
+  if (now > invitation.expiresAt && invitation.invitationStatus !== "Activated") {
     invitation.invitationStatus = "Expired";
     await invitation.save();
     return res.status(403).json({ message: "This invitation has expired" });
   }
 
-  if (now < loginWindowOpenAt) {
-    return res.status(403).json({
-      message: "The assessment login window has not opened yet.",
-      loginWindowOpenAt,
-      examStartAt,
-      loginCountdownSeconds: getCountdownSeconds(loginWindowOpenAt),
-    });
+  // Exam window closed check (unchanged)
+  if (now >= examEndAt) {
+    return res.status(403).json({ message: "The assessment window has already closed.", examEndAt });
   }
+
+  // No login-window restriction: students may log in any time before the exam window closes.
 
   student.isActive = true;
   student.activatedAt = student.activatedAt || now;
@@ -134,14 +131,15 @@ router.post("/invite/:token/start", async (req, res) => {
   const authToken = jwt.sign({ id: student._id, userType: "student" }, process.env.JWT_SECRET || "dev-secret", { expiresIn: "1d" });
 
   res.json({
-    message: "Assessment started",
+    message: "Logged in successfully",
     token: authToken,
     driveId: drive._id,
     studentName: student.name,
     companyName: company.companyName,
     driveName: drive.driveName,
     examStartAt,
-    loginWindowOpenAt,
+    examEndAt,
+    canStartAssessment: now >= examStartAt && now < examEndAt,
   });
 });
 
