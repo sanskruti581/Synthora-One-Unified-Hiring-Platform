@@ -15,7 +15,7 @@ const initialDrive = {
   examDate: "",
   examTime: "",
   durationMinutes: "",
-  rounds: ["Aptitude", "Coding", "HR"],
+  rounds: ["Aptitude", "Coding"],
   aptitudeCutoff: "",
   lastRegistrationDate: "",
 };
