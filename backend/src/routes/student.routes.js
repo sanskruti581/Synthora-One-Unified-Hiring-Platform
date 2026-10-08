@@ -6,6 +6,7 @@ import Company from "../models/Company.js";
 import { requireStudent } from "../middleware/auth.js";
 import jwt from "jsonwebtoken";
 import { getExamStartDate } from "../utils/tokens.js";
+import { getNextRound, normalizeRoundName, calculateOverallScore, determineFinalResult } from "../utils/roundUtils.js";
 
 const router = Router();
 
@@ -23,9 +24,8 @@ async function getInvitationPayload(token) {
   return { invitation, student, drive, company };
 }
 
-function getLoginWindowOpenAt(drive) {
-  return new Date(getExamStartDate(drive.examDate, drive.examTime).getTime() - 10 * 60 * 1000);
-}
+// Login is no longer restricted to a 10-minute window before the exam.
+// Students may log in as soon as their invitation is valid.
 
 function getExamEndDate(drive) {
   return new Date(getExamStartDate(drive.examDate, drive.examTime).getTime() + Number(drive.durationMinutes) * 60 * 1000);
@@ -46,12 +46,16 @@ router.get("/invite/:token", async (req, res) => {
   const now = new Date();
   const examStartAt = getExamStartDate(drive.examDate, drive.examTime);
   const examEndAt = getExamEndDate(drive);
-  const loginWindowOpenAt = getLoginWindowOpenAt(drive);
 
   if (now > invitation.expiresAt && invitation.invitationStatus !== "Activated") {
     invitation.invitationStatus = "Expired";
     await invitation.save();
   }
+
+  // canLogin: students may log in any time before the exam window closes (or has expired)
+  const invitationExpired = now > invitation.expiresAt && invitation.invitationStatus !== "Activated";
+  const examClosed = now >= examEndAt;
+  const canLogin = !invitationExpired && !examClosed;
 
   return res.json({
     token: invitation.token,
@@ -67,11 +71,9 @@ router.get("/invite/:token", async (req, res) => {
     durationMinutes: drive.durationMinutes,
     status:
       invitation.assessmentStatus === "Completed"
-          ? "Completed"
-        : now >= examEndAt
+        ? "Completed"
+        : examClosed
           ? "Closed"
-        : now < loginWindowOpenAt
-          ? "Login Window Closed"
           : invitation.assessmentStatus === "Started"
             ? "Assessment Started"
             : "Ready to Begin",
@@ -79,12 +81,9 @@ router.get("/invite/:token", async (req, res) => {
     driveId: drive._id,
     examStartAt,
     examEndAt,
-    loginWindowOpenAt,
-    canLogin: now >= loginWindowOpenAt && now < examEndAt,
+    canLogin,
     canStartAssessment: now >= examStartAt && now < examEndAt,
-    loginCountdownSeconds: getCountdownSeconds(loginWindowOpenAt),
     examCountdownSeconds: getCountdownSeconds(examStartAt),
-    activationOpenAt: invitation.activationOpenAt,
     expiresAt: invitation.expiresAt,
   });
 });
@@ -99,22 +98,21 @@ router.post("/invite/:token/start", async (req, res) => {
   const { invitation, student, drive, company } = payload;
   const now = new Date();
   const examStartAt = getExamStartDate(drive.examDate, drive.examTime);
-  const loginWindowOpenAt = getLoginWindowOpenAt(drive);
+  const examEndAt = getExamEndDate(drive);
 
-  if (now > invitation.expiresAt) {
+  // Invitation expiry check (unchanged)
+  if (now > invitation.expiresAt && invitation.invitationStatus !== "Activated") {
     invitation.invitationStatus = "Expired";
     await invitation.save();
     return res.status(403).json({ message: "This invitation has expired" });
   }
 
-  if (now < loginWindowOpenAt) {
-    return res.status(403).json({
-      message: "The assessment login window has not opened yet.",
-      loginWindowOpenAt,
-      examStartAt,
-      loginCountdownSeconds: getCountdownSeconds(loginWindowOpenAt),
-    });
+  // Exam window closed check (unchanged)
+  if (now >= examEndAt) {
+    return res.status(403).json({ message: "The assessment window has already closed.", examEndAt });
   }
+
+  // No login-window restriction: students may log in any time before the exam window closes.
 
   student.isActive = true;
   student.activatedAt = student.activatedAt || now;
@@ -133,14 +131,15 @@ router.post("/invite/:token/start", async (req, res) => {
   const authToken = jwt.sign({ id: student._id, userType: "student" }, process.env.JWT_SECRET || "dev-secret", { expiresIn: "1d" });
 
   res.json({
-    message: "Assessment started",
+    message: "Logged in successfully",
     token: authToken,
     driveId: drive._id,
     studentName: student.name,
     companyName: company.companyName,
     driveName: drive.driveName,
     examStartAt,
-    loginWindowOpenAt,
+    examEndAt,
+    canStartAssessment: now >= examStartAt && now < examEndAt,
   });
 });
 
@@ -166,12 +165,8 @@ router.post("/activate/:token", async (req, res) => {
   }
 
   const now = new Date();
-  if (now < invitation.activationOpenAt) {
-    return res.status(403).json({
-      message: "This link opens 10 minutes before the exam starts",
-      activationOpenAt: invitation.activationOpenAt,
-    });
-  }
+  // Removed: login-window restriction that blocked activation until 10 min before exam.
+  // Students may activate their invitation as soon as the link is valid.
 
   if (now > invitation.expiresAt) {
     invitation.invitationStatus = "Expired";
@@ -227,6 +222,10 @@ router.get("/me/dashboard", requireStudent, async (req, res) => {
     currentRound: student.currentRound,
     score: student.score,
     result: student.result,
+    roundResults: student.roundResults,
+    aptitudeScore: student.aptitudeScore,
+    codingScore: student.codingScore,
+    overallScore: student.overallScore,
   });
 });
 
@@ -256,9 +255,11 @@ router.get("/assessment/:driveId", requireStudent, async (req, res) => {
     startedAt: student.startedAt,
     examStartAt: getExamStartDate(drive.examDate, drive.examTime),
     examEndAt: getExamEndDate(drive),
-    loginWindowOpenAt: getLoginWindowOpenAt(drive),
     canStartAssessment: new Date() >= getExamStartDate(drive.examDate, drive.examTime) && new Date() < getExamEndDate(drive),
     answers: student.answers instanceof Map ? Object.fromEntries(student.answers) : (student.answers || {}),
+    rounds: drive.rounds,
+    currentRound: student.currentRound,
+    roundResults: student.roundResults,
   });
 });
 
@@ -385,22 +386,53 @@ router.post("/assessment/complete", requireStudent, async (req, res) => {
 
   const answers = req.body.answers && typeof req.body.answers === "object" ? req.body.answers : {};
   const score = Number(req.body.score ?? 0);
-  const result = score >= Number(drive.aptitudeCutoff) ? "Qualified" : "Rejected";
   const completedAt = new Date();
 
-  student.assessmentStatus = "Completed";
-  student.completedAt = completedAt;
+  // Save basic aptitude info for backward compatibility
   student.answers = answers;
   student.score = score;
-  student.result = result;
-  await student.save();
+  student.aptitudeScore = score;
 
-  await Invitation.findOneAndUpdate(
-    { student: student._id, drive: student.drive },
-    { assessmentStatus: "Completed", completedAt, answers, score, result },
-  );
+  // Add round result for Aptitude
+  student.roundResults = (student.roundResults || []).filter(r => normalizeRoundName(r.roundName) !== "Aptitude");
+  student.roundResults.push({
+    roundName: "Aptitude",
+    status: "Completed",
+    score: score,
+    maxScore: (Object.keys(answers).length || 0) * 20, // each aptitude question is worth 20 points
+    completedAt: completedAt
+  });
 
-  res.json({ message: "Assessment result stored", score, result, completedAt });
+  const nextRound = getNextRound(drive, "Aptitude");
+
+  if (nextRound) {
+    student.currentRound = nextRound;
+    // Do not mark as completed yet
+    await student.save();
+
+    await Invitation.findOneAndUpdate(
+      { student: student._id, drive: student.drive },
+      { answers, score }
+    );
+
+    res.json({ message: "Aptitude round completed", nextRound });
+  } else {
+    // Determine final result
+    const result = score >= Number(drive.aptitudeCutoff) ? "Qualified" : "Rejected";
+
+    student.assessmentStatus = "Completed";
+    student.completedAt = completedAt;
+    student.result = result;
+    student.overallScore = calculateOverallScore(drive, student);
+    await student.save();
+
+    await Invitation.findOneAndUpdate(
+      { student: student._id, drive: student.drive },
+      { assessmentStatus: "Completed", completedAt, answers, score, result },
+    );
+
+    res.json({ message: "Assessment result stored", score, result, completedAt });
+  }
 });
 
 export default router;

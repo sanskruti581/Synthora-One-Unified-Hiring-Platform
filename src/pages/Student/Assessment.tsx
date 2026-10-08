@@ -4,7 +4,7 @@ import { AlertTriangle, ArrowLeft, ArrowRight, Camera, CheckCircle2, Clock3, Max
 import ThemeToggle from "../../components/ThemeToggle";
 import { ProctoringGuard } from "../../components/ProctoringGuard";
 import { ProctoringReport } from "../../components/ProctoringReport";
-import { getAssessment, saveAssessmentAnswers, startAssessmentForDrive, submitAssessment, type AssessmentData } from "../../services/studentService";
+import { getAssessment, saveAssessmentAnswers, startAssessmentForDrive, submitAssessment, completeAptitudeRound, type AssessmentData } from "../../services/studentService";
 import { useCountdown } from "../../hooks/useCountdown";
 import { useDeviceDetection } from "../../hooks/useDeviceDetection";
 import { useFaceDetection } from "../../hooks/useFaceDetection";
@@ -123,16 +123,22 @@ export default function Assessment() {
     }
 
     try {
-      const response = await submitAssessment(score, answers);
+      const response = await completeAptitudeRound(driveId, score, answers);
       setMessage(`Assessment submitted. Score: ${score}. Result: ${response.data.result}.`);
-      window.setTimeout(() => navigate("/student/dashboard"), 1200);
+      window.setTimeout(() => {
+        if (response.data.nextRound === "Coding") {
+          navigate(`/coding/${driveId}`);
+        } else {
+          navigate("/student/dashboard");
+        }
+      }, 1200);
     } catch {
       hasSubmittedRef.current = false;
       setMessage("Could not submit assessment. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
-  }, [answers, navigate, score]);
+  }, [answers, navigate, score, driveId]);
 
   const addViolation = useCallback(async (type: string, message: string, metadata?: Record<string, unknown>) => {
     const currentState = { violationCount: violationCountRef.current, autoSubmitted: isAutoSubmitted };
@@ -454,7 +460,7 @@ export default function Assessment() {
 
       <section className="mx-auto mt-8 grid max-w-6xl gap-6 lg:grid-cols-[0.72fr_1.28fr]">
         <aside className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/10">
-          <p className="text-xs font-extrabold uppercase text-sky-600 dark:text-sky-300">Aptitude Assessment</p>
+          <p className="text-xs font-extrabold uppercase text-sky-600 dark:text-sky-300">{assessment?.currentRound ? `${assessment.currentRound} Assessment` : "Aptitude Assessment"}</p>
           <h1 className="mt-2 text-2xl font-extrabold text-slate-950 dark:text-white">{assessment?.driveName ?? "Assessment"}</h1>
           <div className="mt-5 grid gap-3 text-sm">
             <Info label="Student Name" value={assessment?.studentName ?? "-"} />
@@ -530,7 +536,7 @@ export default function Assessment() {
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <Info label="Company" value={assessment?.companyName ?? "-"} />
                   <Info label="Candidate Name" value={assessment?.studentName ?? "-"} />
-                  <Info label="Round" value="APTITUDE" />
+                  <Info label="Round" value={assessment?.currentRound ? assessment.currentRound.toUpperCase() : "APTITUDE"} />
                   <Info label="Exam Time" value={`${assessment?.examDate ?? "-"} ${assessment?.examTime ?? ""}`} />
                 </div>
               </div>

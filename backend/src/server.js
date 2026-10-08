@@ -10,6 +10,8 @@ import companyRoutes from "./routes/company.routes.js";
 import driveRoutes from "./routes/drive.routes.js";
 import studentRoutes from "./routes/student.routes.js";
 import proctoringRoutes from "./routes/proctoring.routes.js";
+import codingRoutes from "./routes/coding.routes.js";
+import { seedCodingQuestions } from "./utils/seedCodingQuestions.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -32,10 +34,13 @@ app.use("/api/companies", companyRoutes);
 app.use("/api/company/drives", driveRoutes);
 app.use("/api/students", studentRoutes);
 app.use("/api/proctoring", proctoringRoutes);
+app.use("/api/coding", codingRoutes);
 
 async function startServer() {
   try {
     await connectDatabase();
+    await seedCodingQuestions();
+    
     server = app.listen(port, () => {
       console.log(`Synthora backend running on http://localhost:${port}`);
     });

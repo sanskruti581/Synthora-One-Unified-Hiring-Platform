@@ -87,6 +87,11 @@ export type DriveStudent = {
   completedAt?: string;
   score?: number | null;
   result: string;
+  currentRound?: string;
+  aptitudeScore?: number | null;
+  codingScore?: number | null;
+  overallScore?: number | null;
+  roundResults?: { roundName: string; status: string; score?: number | null }[];
 };
 
 export type DriveStats = {
