@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Download, Mail, RefreshCw, type LucideIcon } from "lucide-react";
+import { Download, Mail, RefreshCw, MessageSquare, UserCheck, type LucideIcon } from "lucide-react";
 import DashboardLayout from "../../../layouts/DashboardLayout";
+import OralInterviewModal from "../../../components/OralInterviewModal";
 import {
   downloadDriveFile,
   getHiringDriveDetails,
   sendReminderEmails,
+  selectForTechnicalAssessment,
   type DriveStats,
   type DriveStudent,
   type HiringDrive,
@@ -33,6 +35,8 @@ export default function DriveDetails() {
   const [filter, setFilter] = useState<(typeof filters)[number]>("All Students");
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedStudentForOral, setSelectedStudentForOral] = useState<{ id: string; name: string } | null>(null);
+  const [invitingStudentId, setInvitingStudentId] = useState<string | null>(null);
 
   const loadDetails = async () => {
     const response = await getHiringDriveDetails(driveId);
@@ -97,6 +101,21 @@ export default function DriveDetails() {
             : `${fallbackName}.csv`;
 
     await downloadDriveFile(driveId, type, filename);
+  };
+
+  const handleTechnicalInvite = async (student: DriveStudent) => {
+    setMessage("");
+    setInvitingStudentId(student._id);
+
+    try {
+      const response = await selectForTechnicalAssessment(driveId, student._id);
+      setMessage(`${student.studentName || student.email} selected for Technical Assessment. ${response.data.technicalAssessmentEmailSent ? "Email sent." : `Email status: ${response.data.technicalAssessmentEmailStatus}.`}`);
+      await loadDetails();
+    } catch {
+      setMessage("Unable to select this student for Technical Assessment.");
+    } finally {
+      setInvitingStudentId(null);
+    }
   };
 
   if (isLoading) {
@@ -192,10 +211,10 @@ export default function DriveDetails() {
           </div>
 
           <div className="mt-5 overflow-x-auto rounded-xl border border-synthora-border">
-            <table className="min-w-[1040px] w-full text-left text-sm">
+            <table className="min-w-[1280px] w-full text-left text-sm">
               <thead className="bg-blue-50/80 text-xs uppercase text-synthora-muted">
                 <tr>
-                  {["Student Name", "Email", "Invitation Status", "Email Sent", "Assessment Status", "Started Time", "Completed Time", "Score", "Qualified / Rejected"].map((heading) => (
+                  {["Student Name", "Email", "Aptitude Status", "Aptitude Score", "Aptitude Result", "Technical Status", "Technical Window", "Technical Score", "Technical Action", "Final Result", "Viva Interview"].map((heading) => (
                     <th key={heading} className="px-4 py-3 font-extrabold">
                       {heading}
                     </th>
@@ -207,13 +226,77 @@ export default function DriveDetails() {
                   <tr key={student._id} className="transition hover:bg-blue-50/50">
                     <td className="px-4 py-3 font-bold text-synthora-text">{student.studentName || "Student"}</td>
                     <td className="px-4 py-3 text-synthora-muted">{student.email}</td>
-                    <td className="px-4 py-3">{student.invitationStatus}</td>
-                    <td className="px-4 py-3">{student.emailSent ? "Sent" : student.emailSentStatus}</td>
                     <td className="px-4 py-3">{student.assessmentStatus}</td>
-                    <td className="px-4 py-3">{formatDate(student.startedAt)}</td>
-                    <td className="px-4 py-3">{formatDate(student.completedAt)}</td>
-                    <td className="px-4 py-3">{student.score ?? "-"}</td>
-                    <td className="px-4 py-3">{student.result}</td>
+                    <td className="px-4 py-3 font-bold">{student.aptitudeScore ?? student.score ?? "-"}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-extrabold ${
+                        student.result === "Rejected"
+                          ? "bg-rose-50 text-rose-600"
+                          : student.aptitudeScore !== null && student.aptitudeScore !== undefined
+                            ? "bg-emerald-50 text-emerald-600"
+                            : "bg-slate-100 text-slate-600"
+                      }`}>
+                        {student.aptitudeScore !== null && student.aptitudeScore !== undefined ? "Aptitude Completed" : "Pending"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-extrabold ${getTechnicalStatusClass(student.technicalAssessmentStatus)}`}>
+                        {student.technicalAssessmentStatus ?? "Not Selected"}
+                      </span>
+                      {student.technicalAssessmentEmailSent ? (
+                        <p className="mt-1 text-[11px] font-semibold text-emerald-600">Email sent</p>
+                      ) : student.technicalAssessmentEmailStatus && student.technicalAssessmentStatus !== "Not Selected" ? (
+                        <p className="mt-1 text-[11px] font-semibold text-slate-500">{student.technicalAssessmentEmailStatus}</p>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-3 text-xs font-semibold text-synthora-muted">
+                      {student.technicalAssessmentAccessExpiresAt ? `Until ${formatDate(student.technicalAssessmentAccessExpiresAt)}` : "-"}
+                    </td>
+                    <td className="px-4 py-3 font-bold text-sky-600">
+                      {student.technicalOralScore !== null && student.technicalOralScore !== undefined
+                        ? `${student.technicalOralScore}/100`
+                        : "-"}
+                    </td>
+                    <td className="px-4 py-3">
+                      {canSelectForTechnical(student) ? (
+                        <button
+                          type="button"
+                          onClick={() => handleTechnicalInvite(student)}
+                          disabled={invitingStudentId === student._id}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60"
+                        >
+                          <UserCheck className="h-3.5 w-3.5" />
+                          {invitingStudentId === student._id ? "Selecting..." : "Select for Technical"}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-slate-400">{getTechnicalActionText(student)}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-extrabold ${
+                        student.result === "Qualified"
+                          ? "bg-emerald-50 text-emerald-600"
+                          : student.result === "Rejected"
+                            ? "bg-rose-50 text-rose-600"
+                            : "bg-slate-100 text-slate-600"
+                      }`}>
+                        {student.result}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {student.technicalOralScore !== null && student.technicalOralScore !== undefined ? (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedStudentForOral({ id: student._id, name: student.studentName || student.email })}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-700 hover:bg-sky-100 transition shadow-sm"
+                        >
+                          <MessageSquare className="h-3.5 w-3.5" />
+                          View Viva
+                        </button>
+                      ) : (
+                        <span className="text-xs text-slate-400">Pending</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -221,6 +304,15 @@ export default function DriveDetails() {
           </div>
         </section>
       </div>
+
+      {selectedStudentForOral ? (
+        <OralInterviewModal
+          driveId={driveId}
+          studentId={selectedStudentForOral.id}
+          studentName={selectedStudentForOral.name}
+          onClose={() => setSelectedStudentForOral(null)}
+        />
+      ) : null}
     </DashboardLayout>
   );
 }
@@ -232,6 +324,53 @@ function Detail({ label, value }: { label: string; value: string }) {
       <p className="mt-1 break-words text-sm font-bold text-synthora-text">{value}</p>
     </div>
   );
+}
+
+function canSelectForTechnical(student: DriveStudent) {
+  const hasAptitudeResult = student.aptitudeScore !== null && student.aptitudeScore !== undefined;
+  const technicalStatus = student.technicalAssessmentStatus ?? "Not Selected";
+
+  return hasAptitudeResult && technicalStatus === "Not Selected" && student.result !== "Rejected";
+}
+
+function getTechnicalActionText(student: DriveStudent) {
+  if (student.technicalAssessmentStatus === "Completed") {
+    return "Completed";
+  }
+
+  if (student.technicalAssessmentStatus === "Expired") {
+    return "Expired";
+  }
+
+  if (student.technicalAssessmentStatus && student.technicalAssessmentStatus !== "Not Selected") {
+    return "Already selected";
+  }
+
+  if (student.result === "Rejected") {
+    return "Not eligible";
+  }
+
+  return "Awaiting aptitude";
+}
+
+function getTechnicalStatusClass(status?: string) {
+  if (status === "Completed") {
+    return "bg-emerald-50 text-emerald-600";
+  }
+
+  if (status === "Active" || status === "In Progress") {
+    return "bg-sky-50 text-sky-600";
+  }
+
+  if (status === "Shortlisted") {
+    return "bg-amber-50 text-amber-600";
+  }
+
+  if (status === "Expired") {
+    return "bg-rose-50 text-rose-600";
+  }
+
+  return "bg-slate-100 text-slate-600";
 }
 
 function Stat({ label, value }: { label: string; value: string | number }) {

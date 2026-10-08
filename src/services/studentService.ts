@@ -50,6 +50,14 @@ export type StudentDashboardData = {
   startedAt?: string;
   completedAt?: string;
   score?: number | null;
+  aptitudeScore?: number | null;
+  technicalOralScore?: number | null;
+  technicalOralStatus?: string;
+  technicalAssessmentStatus?: string;
+  technicalAssessmentInvitedAt?: string;
+  technicalAssessmentAccessStartsAt?: string;
+  technicalAssessmentAccessExpiresAt?: string;
+  currentRound?: string;
   result: string;
 };
 
@@ -68,6 +76,17 @@ export type AssessmentData = {
   loginWindowOpenAt: string;
   canStartAssessment: boolean;
   answers: Record<string, string>;
+  rounds?: string[];
+  aptitudeCutoff?: number;
+  technicalOralCutoff?: number;
+  aptitudeScore?: number | null;
+  technicalOralScore?: number | null;
+  technicalOralStatus?: string;
+  technicalAssessmentStatus?: string;
+  technicalAssessmentInvitedAt?: string;
+  technicalAssessmentAccessStartsAt?: string;
+  technicalAssessmentAccessExpiresAt?: string;
+  currentRound?: string;
 };
 
 export async function getStudentDashboard() {
@@ -118,14 +137,25 @@ export async function saveAssessmentAnswers(driveId: string, answers: Record<str
   }
 }
 
+export interface SubmitAssessmentResponse {
+  message?: string;
+  result: string;
+  score: number;
+  completedAt: string;
+  isAptitudeQualified?: boolean;
+  qualifiedForOral?: boolean;
+  nextRound?: string | null;
+}
+
 export async function submitAssessment(score: number, answers: Record<string, string>) {
   try {
-    return await api.post("/students/assessment/complete", { score, answers });
+    return await api.post<SubmitAssessmentResponse>("/students/assessment/complete", { score, answers });
   } catch (error) {
     if (isFallbackError(error)) {
-      return { data: { result: score >= 60 ? "Qualified" : "Rejected", score, completedAt: new Date().toISOString() } } as { data: { result: string; score: number; completedAt: string } };
+      return { data: { result: score >= 60 ? "Pending" : "Rejected", score, completedAt: new Date().toISOString(), qualifiedForOral: false } } as { data: SubmitAssessmentResponse };
     }
 
     throw error;
   }
 }
+

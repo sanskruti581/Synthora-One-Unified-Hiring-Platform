@@ -40,10 +40,16 @@ router.post("/login", async (req, res) => {
         return res.status(403).json({ message: "Student login opens 10 minutes before exam time" });
       }
 
-      await Student.findByIdAndUpdate(student._id, { assessmentStatus: "Logged In", lastLogin: new Date() });
+      const loginUpdate = { lastLogin: new Date() };
+
+      if (student.assessmentStatus === "Pending") {
+        loginUpdate.assessmentStatus = "Logged In";
+      }
+
+      await Student.findByIdAndUpdate(student._id, loginUpdate);
       await Invitation.findOneAndUpdate(
         { student: student._id, drive: student.drive },
-        { assessmentStatus: "Logged In", lastLogin: new Date() },
+        loginUpdate,
       );
 
       const token = jwt.sign({ id: student._id, userType: "student" }, process.env.JWT_SECRET || "dev-secret", { expiresIn: "1d" });

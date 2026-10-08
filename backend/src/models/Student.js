@@ -26,6 +26,32 @@ const studentSchema = new mongoose.Schema(
       default: {},
     },
     score: { type: Number, default: null },
+    aptitudeScore: { type: Number, default: null },
+    technicalOralScore: { type: Number, default: null },
+    technicalOralStatus: {
+      type: String,
+      enum: ["Not Started", "In Progress", "Completed", "Exempt"],
+      default: "Not Started",
+    },
+    technicalAssessmentStatus: {
+      type: String,
+      enum: ["Not Selected", "Shortlisted", "Active", "In Progress", "Completed", "Expired"],
+      default: "Not Selected",
+    },
+    technicalAssessmentInvitedAt: Date,
+    technicalAssessmentAccessStartsAt: Date,
+    technicalAssessmentAccessExpiresAt: Date,
+    technicalAssessmentEmailStatus: {
+      type: String,
+      enum: ["sent", "failed", "smtp_not_configured"],
+      default: "smtp_not_configured",
+    },
+    technicalAssessmentEmailSent: { type: Boolean, default: false },
+    technicalAssessmentEmailError: String,
+    technicalOralInterview: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "TechnicalOralInterview",
+    },
     result: {
       type: String,
       enum: ["Pending", "Qualified", "Rejected"],

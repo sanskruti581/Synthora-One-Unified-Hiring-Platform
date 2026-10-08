@@ -8,10 +8,12 @@ import Invitation from "../models/Invitation.js";
 import { requireCompany } from "../middleware/auth.js";
 import { parseStudentFile } from "../utils/parseStudentFile.js";
 import { createInvitationToken, createStudentPassword, getExamStartDate } from "../utils/tokens.js";
-import { sendStudentInvitationEmail } from "../utils/mailer.js";
+import { sendStudentInvitationEmail, sendTechnicalAssessmentInvitationEmail } from "../utils/mailer.js";
+import TechnicalOralInterview from "../models/TechnicalOralInterview.js";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
+const TECHNICAL_ACCESS_WINDOW_MS = 4 * 60 * 60 * 1000;
 
 function toPublicDrive(drive) {
   const data = drive.toObject();
@@ -28,7 +30,7 @@ function toPublicDrive(drive) {
 }
 
 function buildStats(students) {
-  const scores = students.map((student) => student.score).filter((score) => typeof score === "number");
+  const scores = students.map((student) => student.aptitudeScore ?? student.score).filter((score) => typeof score === "number");
   const loggedInStudents = students.filter((student) => student.assessmentStatus === "Logged In").length;
   const startedStudents = students.filter((student) => student.assessmentStatus === "Started").length;
 
@@ -46,6 +48,37 @@ function buildStats(students) {
   };
 }
 
+function getTechnicalAssessmentState(student, invitation) {
+  if (student.technicalAssessmentStatus === "Completed" || student.technicalOralStatus === "Completed") {
+    return "Completed";
+  }
+
+  const startsAt = invitation?.technicalAssessmentAccessStartsAt || student.technicalAssessmentAccessStartsAt;
+  const expiresAt = invitation?.technicalAssessmentAccessExpiresAt || student.technicalAssessmentAccessExpiresAt;
+
+  if (!startsAt || !expiresAt || student.technicalAssessmentStatus === "Not Selected") {
+    return "Not Selected";
+  }
+
+  const now = Date.now();
+  const startTime = new Date(startsAt).getTime();
+  const expiryTime = new Date(expiresAt).getTime();
+
+  if (Number.isFinite(expiryTime) && now > expiryTime) {
+    return "Expired";
+  }
+
+  if (Number.isFinite(startTime) && now < startTime) {
+    return "Shortlisted";
+  }
+
+  if (student.technicalOralStatus === "In Progress") {
+    return "In Progress";
+  }
+
+  return "Active";
+}
+
 function csvEscape(value) {
   const text = value === null || value === undefined ? "" : String(value);
   return `"${text.replace(/"/g, '""')}"`;
@@ -53,7 +86,7 @@ function csvEscape(value) {
 
 function buildResultRows(students) {
   return [
-    ["Student Name", "Email", "Invitation Status", "Email Sent", "Assessment Status", "Started Time", "Completed Time", "Score", "Result"],
+    ["Student Name", "Email", "Invitation Status", "Email Sent", "Assessment Status", "Started Time", "Completed Time", "Aptitude Score", "Technical Status", "Technical Score", "Result"],
     ...students.map((student) => [
       student.name,
       student.email,
@@ -62,7 +95,9 @@ function buildResultRows(students) {
       student.assessmentStatus,
       student.startedAt ? student.startedAt.toISOString() : "",
       student.completedAt ? student.completedAt.toISOString() : "",
-      student.score ?? "",
+      student.aptitudeScore ?? student.score ?? "",
+      student.technicalAssessmentStatus ?? "Not Selected",
+      student.technicalOralScore ?? "",
       student.result,
     ]),
   ];
@@ -172,6 +207,7 @@ router.post(
         durationMinutes: Number(req.body.durationMinutes),
         rounds: parsedRounds,
         aptitudeCutoff: Number(req.body.aptitudeCutoff),
+        technicalOralCutoff: Number(req.body.technicalOralCutoff || 60),
         lastRegistrationDate: req.body.lastRegistrationDate,
       });
 
@@ -284,6 +320,7 @@ router.get("/:driveId", requireCompany, async (req, res) => {
   const invitationByStudentId = new Map(invitations.map((invitation) => [String(invitation.student), invitation]));
   const studentRows = students.map((student) => {
     const invitation = invitationByStudentId.get(String(student._id));
+    const technicalAssessmentStatus = getTechnicalAssessmentState(student, invitation);
 
     return {
       _id: student._id,
@@ -298,6 +335,16 @@ router.get("/:driveId", requireCompany, async (req, res) => {
       startedAt: student.startedAt,
       completedAt: student.completedAt,
       score: student.score,
+      aptitudeScore: student.aptitudeScore ?? student.score,
+      technicalOralScore: student.technicalOralScore,
+      technicalOralStatus: student.technicalOralStatus || "Not Started",
+      technicalAssessmentStatus,
+      technicalAssessmentInvitedAt: invitation?.technicalAssessmentInvitedAt || student.technicalAssessmentInvitedAt,
+      technicalAssessmentAccessStartsAt: invitation?.technicalAssessmentAccessStartsAt || student.technicalAssessmentAccessStartsAt,
+      technicalAssessmentAccessExpiresAt: invitation?.technicalAssessmentAccessExpiresAt || student.technicalAssessmentAccessExpiresAt,
+      technicalAssessmentEmailSent: invitation?.technicalAssessmentEmailSent ?? student.technicalAssessmentEmailSent ?? false,
+      technicalAssessmentEmailStatus: invitation?.technicalAssessmentEmailStatus ?? student.technicalAssessmentEmailStatus ?? "smtp_not_configured",
+      technicalOralInterview: student.technicalOralInterview,
       result: student.result,
     };
   });
@@ -307,6 +354,102 @@ router.get("/:driveId", requireCompany, async (req, res) => {
     stats: buildStats(students),
     students: studentRows,
   });
+});
+
+router.post("/:driveId/technical-assessment/:studentId/invite", requireCompany, async (req, res) => {
+  try {
+    const drive = await HiringDrive.findOne({ _id: req.params.driveId, company: req.companyId });
+    const company = await Company.findById(req.companyId);
+
+    if (!drive || !company) {
+      return res.status(404).json({ message: "Hiring drive not found" });
+    }
+
+    const hasOralRound = Array.isArray(drive.rounds) && drive.rounds.includes("Technical Oral");
+    if (!hasOralRound) {
+      return res.status(400).json({ message: "Technical Assessment is not configured for this hiring drive" });
+    }
+
+    const student = await Student.findOne({ _id: req.params.studentId, drive: drive._id, company: req.companyId });
+    if (!student) {
+      return res.status(404).json({ message: "Student not found for this hiring drive" });
+    }
+
+    const aptitudeScore = student.aptitudeScore ?? student.score;
+    if (typeof aptitudeScore !== "number") {
+      return res.status(400).json({ message: "Aptitude result is not available for this student yet" });
+    }
+
+    if (student.technicalOralStatus === "Completed" || student.technicalAssessmentStatus === "Completed") {
+      return res.status(400).json({ message: "Technical Assessment is already completed for this student" });
+    }
+
+    const invitation = await Invitation.findOne({ student: student._id, drive: drive._id });
+    if (!invitation) {
+      return res.status(404).json({ message: "Student invitation record not found" });
+    }
+
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + TECHNICAL_ACCESS_WINDOW_MS);
+    const clientUrl = process.env.CLIENT_URL || "http://localhost:5173";
+    const assessmentLink = `${clientUrl}/student/dashboard`;
+
+    student.currentRound = "Technical Oral";
+    student.technicalAssessmentStatus = "Active";
+    student.technicalAssessmentInvitedAt = now;
+    student.technicalAssessmentAccessStartsAt = now;
+    student.technicalAssessmentAccessExpiresAt = expiresAt;
+    student.technicalOralStatus = student.technicalOralStatus === "In Progress" ? "In Progress" : "Not Started";
+
+    invitation.currentRound = "Technical Oral";
+    invitation.technicalAssessmentStatus = "Active";
+    invitation.technicalAssessmentInvitedAt = now;
+    invitation.technicalAssessmentAccessStartsAt = now;
+    invitation.technicalAssessmentAccessExpiresAt = expiresAt;
+    invitation.technicalOralStatus = invitation.technicalOralStatus === "In Progress" ? "In Progress" : "Not Started";
+
+    try {
+      const mailResult = await sendTechnicalAssessmentInvitationEmail({
+        to: student.email,
+        studentName: student.name,
+        companyName: company.companyName,
+        driveName: drive.driveName,
+        jobRole: drive.jobRole,
+        accessStartsAt: now,
+        accessExpiresAt: expiresAt,
+        assessmentLink,
+      });
+
+      student.technicalAssessmentEmailStatus = mailResult.status;
+      student.technicalAssessmentEmailSent = mailResult.status === "sent";
+      student.technicalAssessmentEmailError = undefined;
+      invitation.technicalAssessmentEmailStatus = mailResult.status;
+      invitation.technicalAssessmentEmailSent = mailResult.status === "sent";
+      invitation.technicalAssessmentEmailError = undefined;
+    } catch (error) {
+      student.technicalAssessmentEmailStatus = "failed";
+      student.technicalAssessmentEmailSent = false;
+      student.technicalAssessmentEmailError = error.message;
+      invitation.technicalAssessmentEmailStatus = "failed";
+      invitation.technicalAssessmentEmailSent = false;
+      invitation.technicalAssessmentEmailError = error.message;
+    }
+
+    await student.save();
+    await invitation.save();
+
+    return res.json({
+      message: "Technical Assessment invitation activated",
+      technicalAssessmentStatus: student.technicalAssessmentStatus,
+      technicalAssessmentAccessStartsAt: student.technicalAssessmentAccessStartsAt,
+      technicalAssessmentAccessExpiresAt: student.technicalAssessmentAccessExpiresAt,
+      technicalAssessmentEmailStatus: student.technicalAssessmentEmailStatus,
+      technicalAssessmentEmailSent: student.technicalAssessmentEmailSent,
+    });
+  } catch (error) {
+    console.error("Technical Assessment invitation failed:", error);
+    return res.status(500).json({ message: error.message || "Technical Assessment invitation failed" });
+  }
 });
 
 router.delete("/:driveId", requireCompany, async (req, res) => {
@@ -428,6 +571,28 @@ router.get("/:driveId/download/:type", requireCompany, async (req, res) => {
   }
 
   return res.status(400).json({ message: "Unsupported download type" });
+});
+
+router.get("/:driveId/oral/:studentId", requireCompany, async (req, res) => {
+  try {
+    const drive = await HiringDrive.findOne({ _id: req.params.driveId, company: req.companyId });
+    if (!drive) {
+      return res.status(404).json({ message: "Hiring drive not found" });
+    }
+
+    const interview = await TechnicalOralInterview.findOne({
+      driveId: drive._id,
+      studentId: req.params.studentId,
+    }).populate("studentId", "name email");
+
+    if (!interview) {
+      return res.status(404).json({ message: "No oral interview record found for this candidate" });
+    }
+
+    return res.json({ interview });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to fetch oral interview details", error: error.message });
+  }
 });
 
 export default router;

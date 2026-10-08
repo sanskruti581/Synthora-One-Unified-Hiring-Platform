@@ -18,6 +18,24 @@ export default function StudentDashboard() {
   const now = Date.now();
   const isCompleted = assessmentStatus.toLowerCase() === "completed";
   const isStarted = ["started", "in_progress", "in progress", "in-progress"].includes(assessmentStatus.toLowerCase());
+  const hasTechnicalRound = Boolean(assessment?.rounds?.includes("Technical Oral"));
+  const technicalStatus = assessment?.technicalAssessmentStatus ?? "Not Selected";
+  const technicalStartsAt = assessment?.technicalAssessmentAccessStartsAt;
+  const technicalExpiresAt = assessment?.technicalAssessmentAccessExpiresAt;
+  const isTechnicalCompleted = technicalStatus === "Completed" || assessment?.technicalOralStatus === "Completed";
+  const isTechnicalExpired = technicalStatus === "Expired" || Boolean(technicalExpiresAt && now > new Date(technicalExpiresAt).getTime() && !isTechnicalCompleted);
+  const isWithinTechnicalWindow = Boolean(
+    technicalStartsAt &&
+    technicalExpiresAt &&
+    now >= new Date(technicalStartsAt).getTime() &&
+    now <= new Date(technicalExpiresAt).getTime(),
+  );
+  const canStartTechnical =
+    hasTechnicalRound &&
+    !isTechnicalCompleted &&
+    !isTechnicalExpired &&
+    isWithinTechnicalWindow;
+  const isFinalCompleted = isCompleted && (!hasTechnicalRound || isTechnicalCompleted || assessment?.result === "Rejected");
   const isClosed = Boolean(assessment && !isCompleted && now >= new Date(examEndAt).getTime());
   const canStartNow =
     Boolean(assessment) &&
@@ -33,6 +51,16 @@ export default function StudentDashboard() {
   }, []);
 
   const handleStart = async () => {
+    if (assessment?.currentRound === "Technical Oral" && assessment?.technicalOralStatus !== "Completed" && assessment.driveId) {
+      if (!canStartTechnical) {
+        setMessage(isTechnicalExpired ? "The Technical Assessment access window has expired." : "The Technical Assessment is not available yet.");
+        return;
+      }
+
+      navigate(`/assessment/${assessment.driveId}/oral`);
+      return;
+    }
+
     if (assessment?.assessmentStatus === "Started" && assessment.driveId) {
       navigate(`/assessment/${assessment.driveId}`);
       return;
@@ -77,7 +105,51 @@ export default function StudentDashboard() {
             <InfoTile icon={CalendarDays} label="Exam Date" value={assessment?.examDate ?? "-"} />
             <InfoTile icon={Clock3} label="Exam Time" value={assessment?.examTime ?? "-"} />
             <InfoTile icon={LockKeyhole} label="Closes At" value={assessment ? formatTime(examEndAt) : "-"} />
+            <InfoTile icon={CheckCircle2} label="Current Round" value={assessment?.currentRound ?? "Aptitude"} />
           </div>
+
+          {(assessment?.aptitudeScore !== undefined && assessment?.aptitudeScore !== null) || (assessment?.technicalOralScore !== undefined && assessment?.technicalOralScore !== null) ? (
+            <div className="mt-5 grid grid-cols-2 gap-3 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4">
+              <div>
+                <p className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400">Aptitude Score</p>
+                <p className="mt-1 text-2xl font-black text-slate-900 dark:text-white">
+                  {assessment?.aptitudeScore ?? assessment?.score ?? "-"}<span className="text-sm font-bold text-slate-400">/100</span>
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400">Technical Oral Score</p>
+                <p className="mt-1 text-2xl font-black text-sky-600 dark:text-sky-400">
+                  {assessment?.technicalOralScore !== null && assessment?.technicalOralScore !== undefined
+                    ? `${assessment.technicalOralScore}/100`
+                    : assessment?.currentRound === "Technical Oral"
+                    ? "In Progress"
+                    : "-"}
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          {hasTechnicalRound ? (
+            <div className={`mt-5 rounded-2xl border p-4 ${
+              isTechnicalCompleted
+                ? "border-emerald-200 bg-emerald-50 dark:border-emerald-400/20 dark:bg-emerald-400/10"
+                : isTechnicalExpired
+                  ? "border-rose-200 bg-rose-50 dark:border-rose-400/20 dark:bg-rose-400/10"
+                  : canStartTechnical
+                    ? "border-sky-200 bg-sky-50 dark:border-sky-400/20 dark:bg-sky-400/10"
+                    : "border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-white/5"
+            }`}>
+              <p className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400">Technical Assessment</p>
+              <p className="mt-1 text-xl font-extrabold text-slate-950 dark:text-white">{getTechnicalStatusLabel(technicalStatus, canStartTechnical, isTechnicalExpired)}</p>
+              {technicalExpiresAt && !isTechnicalCompleted ? (
+                <p className="mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Available until {formatTime(technicalExpiresAt)}</p>
+              ) : (
+                <p className="mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300">
+                  {isCompleted ? "Waiting for company selection." : "Complete the Aptitude Assessment first."}
+                </p>
+              )}
+            </div>
+          ) : null}
 
           <div className="mt-6 rounded-2xl bg-slate-950 p-5 text-white dark:bg-white dark:text-slate-950">
             <p className="text-sm font-extrabold uppercase tracking-[0.14em] text-sky-300 dark:text-sky-700">Countdown Timer</p>
@@ -101,15 +173,31 @@ export default function StudentDashboard() {
               <p className="mt-1 text-2xl font-extrabold text-slate-950 dark:text-white">
                 {isClosed ? "Closed" : assessment?.assessmentStatus ?? "Pending"}
               </p>
-              {isCompleted ? (
+              {isFinalCompleted ? (
                 <p className="mt-2 text-sm font-bold text-emerald-700 dark:text-emerald-200">Your assessment has been submitted successfully.</p>
+              ) : isCompleted && hasTechnicalRound ? (
+                <p className="mt-2 text-sm font-bold text-sky-700 dark:text-sky-200">Your Aptitude Assessment is completed. The company will review your result for the next round.</p>
               ) : null}
               {isClosed ? (
                 <p className="mt-2 text-sm font-bold text-rose-700 dark:text-rose-200">The assessment window closed at {formatTime(examEndAt)}.</p>
               ) : null}
               {message ? <p className="mt-2 text-sm font-semibold text-rose-600">{message}</p> : null}
             </div>
-            {isCompleted ? (
+            {isTechnicalCompleted ? (
+              <div className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-extrabold text-white">
+                <CheckCircle2 className="h-5 w-5" />
+                Technical Completed
+              </div>
+            ) : canStartTechnical ? (
+              <button
+                type="button"
+                onClick={handleStart}
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-sky-500 px-5 text-sm font-extrabold text-white shadow-lg shadow-sky-500/20 transition hover:-translate-y-0.5 hover:bg-sky-600"
+              >
+                <PlayCircle className="h-5 w-5" />
+                Start Technical Assessment
+              </button>
+            ) : isFinalCompleted ? (
               <div className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-extrabold text-white">
                 <CheckCircle2 className="h-5 w-5" />
                 Completed
@@ -162,6 +250,30 @@ function getDashboardHeading(status: string) {
     title: "Your invited assessment is ready.",
     subtitle: "Review the drive details, keep an eye on the countdown, and start the active round when your assessment window opens.",
   };
+}
+
+function getTechnicalStatusLabel(status: string, canStart: boolean, isExpired: boolean) {
+  if (isExpired) {
+    return "Technical Assessment Expired";
+  }
+
+  if (status === "Completed") {
+    return "Technical Assessment Completed";
+  }
+
+  if (canStart) {
+    return "Technical Assessment Active";
+  }
+
+  if (status === "Shortlisted") {
+    return "Shortlisted / Waiting";
+  }
+
+  if (status === "In Progress") {
+    return "Technical Assessment In Progress";
+  }
+
+  return "Not Selected";
 }
 
 function formatTime(value: string) {

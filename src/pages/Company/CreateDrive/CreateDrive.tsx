@@ -5,7 +5,7 @@ import DashboardLayout from "../../../layouts/DashboardLayout";
 import FormField from "../../../components/FormField";
 import { createHiringDrive } from "../../../services/driveService";
 
-const rounds = ["Aptitude", "Coding", "HR"];
+const rounds = ["Aptitude", "Technical Oral", "Coding", "HR"];
 
 const initialDrive = {
   driveName: "",
@@ -15,8 +15,9 @@ const initialDrive = {
   examDate: "",
   examTime: "",
   durationMinutes: "",
-  rounds: ["Aptitude", "Coding", "HR"],
+  rounds: ["Aptitude", "Technical Oral", "Coding", "HR"],
   aptitudeCutoff: "",
+  technicalOralCutoff: "60",
   lastRegistrationDate: "",
 };
 
@@ -101,13 +102,14 @@ export default function CreateDrive() {
           <FormField label="Exam Date" type="date" value={drive.examDate} onChange={(event) => updateDrive("examDate", event.target.value)} icon={<CalendarDays className="h-5 w-5" />} required />
           <FormField label="Exam Time" type="time" value={drive.examTime} onChange={(event) => updateDrive("examTime", event.target.value)} icon={<Clock3 className="h-5 w-5" />} required />
           <FormField label="Duration (Minutes)" type="number" min="1" value={drive.durationMinutes} onChange={(event) => updateDrive("durationMinutes", event.target.value)} icon={<Timer className="h-5 w-5" />} required />
-          <FormField label="Aptitude Cutoff" type="number" min="0" max="100" value={drive.aptitudeCutoff} onChange={(event) => updateDrive("aptitudeCutoff", event.target.value)} required />
+          <FormField label="Aptitude Cutoff (%)" type="number" min="0" max="100" value={drive.aptitudeCutoff} onChange={(event) => updateDrive("aptitudeCutoff", event.target.value)} required />
+          <FormField label="Technical Oral Cutoff (%)" type="number" min="0" max="100" value={drive.technicalOralCutoff} onChange={(event) => updateDrive("technicalOralCutoff", event.target.value)} required />
           <FormField label="Last Registration Date" type="date" value={drive.lastRegistrationDate} onChange={(event) => updateDrive("lastRegistrationDate", event.target.value)} className="lg:col-span-2" required />
         </div>
 
         <fieldset className="rounded-xl border border-synthora-border bg-blue-50/60 p-4">
           <legend className="px-2 text-sm font-extrabold text-synthora-text">Interview Rounds</legend>
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 md:grid-cols-4">
             {rounds.map((round) => (
               <label key={round} className="flex items-center gap-3 rounded-xl border border-synthora-border bg-white p-4 text-sm font-bold text-synthora-text transition hover:border-synthora-cyan">
                 <input type="checkbox" checked={drive.rounds.includes(round)} onChange={() => toggleRound(round)} className="h-4 w-4 rounded border-synthora-border text-synthora-blue focus:ring-synthora-blue" />

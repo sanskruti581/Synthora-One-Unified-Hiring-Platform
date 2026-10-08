@@ -107,3 +107,87 @@ export async function sendStudentInvitationEmail({
     throw error;
   }
 }
+
+export async function sendTechnicalAssessmentInvitationEmail({
+  to,
+  studentName,
+  companyName,
+  driveName,
+  jobRole,
+  accessStartsAt,
+  accessExpiresAt,
+  assessmentLink,
+}) {
+  if (!hasSmtpConfig()) {
+    return { status: "smtp_not_configured" };
+  }
+
+  const { host, port, secure, auth, from, replyTo } = sanitizeSmtpConfig();
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth,
+  });
+
+  try {
+    const startsAt = new Date(accessStartsAt).toLocaleString();
+    const expiresAt = new Date(accessExpiresAt).toLocaleString();
+    const text = [
+      `Dear ${studentName || "Student"},`,
+      "",
+      `You have been shortlisted by ${companyName} for the Technical Assessment.`,
+      "",
+      `Company: ${companyName}`,
+      `Job Role: ${jobRole}`,
+      `Hiring Drive: ${driveName}`,
+      "Round: Technical Assessment",
+      `Available From: ${startsAt}`,
+      `Available Until: ${expiresAt}`,
+      "",
+      "You have 4 hours from activation to access the Technical Assessment.",
+      "",
+      "Assessment Link:",
+      assessmentLink,
+      "",
+      "Please sign in with your existing Synthora student credentials before starting.",
+      "",
+      "Regards,",
+      "Synthora Recruitment Team",
+    ].join("\n");
+
+    const info = await transporter.sendMail({
+      from,
+      replyTo,
+      to,
+      subject: `Shortlisted for Technical Assessment - ${companyName}`,
+      text,
+      headers: {
+        "X-Auto-Response-Suppress": "OOF, AutoReply",
+      },
+      html: `
+      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
+        <p>Dear ${studentName || "Student"},</p>
+        <p>You have been shortlisted by <strong>${companyName}</strong> for the Technical Assessment.</p>
+        <p><strong>Company</strong><br/>${companyName}</p>
+        <p><strong>Job Role</strong><br/>${jobRole}</p>
+        <p><strong>Hiring Drive</strong><br/>${driveName}</p>
+        <p><strong>Round</strong><br/>Technical Assessment</p>
+        <p><strong>Available From</strong><br/>${startsAt}</p>
+        <p><strong>Available Until</strong><br/>${expiresAt}</p>
+        <p>You have 4 hours from activation to access and complete the Technical Assessment.</p>
+        <p><a href="${assessmentLink}" style="display:inline-block;background:#0284c7;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:700">Start Technical Assessment</a></p>
+        <p>If the button does not work, open this link:<br/><a href="${assessmentLink}">${assessmentLink}</a></p>
+        <p>Please sign in with your existing Synthora student credentials before starting.</p>
+        <p>Regards<br/>Synthora Recruitment Team</p>
+      </div>
+    `,
+    });
+
+    console.log(`Technical assessment email sent to ${to} via ${host}:${port} (${secure ? "SSL" : "TLS"})`, { messageId: info.messageId });
+    return { status: "sent" };
+  } catch (error) {
+    console.error(`Failed to send technical assessment email to ${to}:`, error?.message || error);
+    throw error;
+  }
+}

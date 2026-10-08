@@ -10,6 +10,7 @@ export type HiringDrivePayload = {
   durationMinutes: string;
   rounds: string[];
   aptitudeCutoff: string;
+  technicalOralCutoff?: string;
   lastRegistrationDate: string;
 };
 
@@ -86,6 +87,15 @@ export type DriveStudent = {
   startedAt?: string;
   completedAt?: string;
   score?: number | null;
+  aptitudeScore?: number | null;
+  technicalOralScore?: number | null;
+  technicalOralStatus?: string;
+  technicalAssessmentStatus?: string;
+  technicalAssessmentInvitedAt?: string;
+  technicalAssessmentAccessStartsAt?: string;
+  technicalAssessmentAccessExpiresAt?: string;
+  technicalAssessmentEmailSent?: boolean;
+  technicalAssessmentEmailStatus?: string;
   result: string;
 };
 
@@ -112,6 +122,17 @@ export async function deleteHiringDrive(driveId: string) {
 
 export async function sendReminderEmails(driveId: string) {
   return api.post<{ message: string; sent: number; failed: number; total: number }>(`/company/drives/${driveId}/reminders`);
+}
+
+export async function selectForTechnicalAssessment(driveId: string, studentId: string) {
+  return api.post<{
+    message: string;
+    technicalAssessmentStatus: string;
+    technicalAssessmentAccessStartsAt: string;
+    technicalAssessmentAccessExpiresAt: string;
+    technicalAssessmentEmailStatus: string;
+    technicalAssessmentEmailSent: boolean;
+  }>(`/company/drives/${driveId}/technical-assessment/${studentId}/invite`);
 }
 
 export async function downloadDriveFile(driveId: string, type: "jd" | "students-file" | "qualified" | "results" | "report", filename: string) {
