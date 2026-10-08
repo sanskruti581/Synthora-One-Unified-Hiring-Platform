@@ -176,7 +176,11 @@ export default function StudentDashboard() {
               {isFinalCompleted ? (
                 <p className="mt-2 text-sm font-bold text-emerald-700 dark:text-emerald-200">Your assessment has been submitted successfully.</p>
               ) : isCompleted && hasTechnicalRound ? (
-                <p className="mt-2 text-sm font-bold text-sky-700 dark:text-sky-200">Your Aptitude Assessment is completed. The company will review your result for the next round.</p>
+                <p className="mt-2 text-sm font-bold text-sky-700 dark:text-sky-200">
+                  {canStartTechnical
+                    ? "Congratulations! You qualified for the Technical Assessment. Click below or check your email to begin."
+                    : "Your Aptitude Assessment is completed."}
+                </p>
               ) : null}
               {isClosed ? (
                 <p className="mt-2 text-sm font-bold text-rose-700 dark:text-rose-200">The assessment window closed at {formatTime(examEndAt)}.</p>

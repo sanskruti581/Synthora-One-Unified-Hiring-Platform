@@ -343,7 +343,7 @@ function getTechnicalActionText(student: DriveStudent) {
   }
 
   if (student.technicalAssessmentStatus && student.technicalAssessmentStatus !== "Not Selected") {
-    return "Already selected";
+    return "Auto-invited";
   }
 
   if (student.result === "Rejected") {

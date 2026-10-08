@@ -9,6 +9,12 @@ import { getExamStartDate } from "../utils/tokens.js";
 import TechnicalOralInterview from "../models/TechnicalOralInterview.js";
 import { generateOralQuestion, evaluateSpokenAnswer, generateFinalOralSummary } from "../services/aiService.js";
 
+import {
+  getTechnicalAssessmentState,
+  promoteStudentToTechnicalAssessment,
+  TECHNICAL_ACCESS_WINDOW_MS,
+} from "../utils/technicalAssessment.js";
+
 const router = Router();
 
 async function getInvitationPayload(token) {
@@ -49,36 +55,19 @@ function countAnsweredQuestions(interview) {
   return interview.questions.filter((question) => question.score !== null && question.score !== undefined).length;
 }
 
-function getTechnicalAssessmentState(student, invitation) {
-  if (student.technicalAssessmentStatus === "Completed" || student.technicalOralStatus === "Completed") {
-    return "Completed";
+async function checkAndAutoPromoteStudent(student, drive, company, invitation) {
+  if (!student || !drive) return;
+  const aptitudeScore = student.aptitudeScore ?? student.score;
+  const isAptitudeQualified = typeof aptitudeScore === "number" && aptitudeScore >= Number(drive.aptitudeCutoff);
+  const hasOralRound = Array.isArray(drive.rounds) && drive.rounds.includes("Technical Oral");
+  const notYetInvited = !student.technicalAssessmentStatus || student.technicalAssessmentStatus === "Not Selected";
+
+  if (isAptitudeQualified && hasOralRound && notYetInvited && student.result !== "Rejected") {
+    await promoteStudentToTechnicalAssessment({ student, drive, company, invitation });
   }
-
-  const startsAt = invitation?.technicalAssessmentAccessStartsAt || student.technicalAssessmentAccessStartsAt;
-  const expiresAt = invitation?.technicalAssessmentAccessExpiresAt || student.technicalAssessmentAccessExpiresAt;
-
-  if (!startsAt || !expiresAt || student.technicalAssessmentStatus === "Not Selected") {
-    return "Not Selected";
-  }
-
-  const now = Date.now();
-  const startTime = new Date(startsAt).getTime();
-  const expiryTime = new Date(expiresAt).getTime();
-
-  if (Number.isFinite(expiryTime) && now > expiryTime) {
-    return "Expired";
-  }
-
-  if (Number.isFinite(startTime) && now < startTime) {
-    return "Shortlisted";
-  }
-
-  if (student.technicalOralStatus === "In Progress") {
-    return "In Progress";
-  }
-
-  return "Active";
 }
+
+
 
 async function syncExpiredTechnicalWindow(student, invitation) {
   const state = getTechnicalAssessmentState(student, invitation);
@@ -368,6 +357,7 @@ router.get("/me/dashboard", requireStudent, async (req, res) => {
     return res.status(404).json({ message: "Student assessment drive is not available" });
   }
 
+  await checkAndAutoPromoteStudent(student, drive, company, invitation);
   const technicalAssessmentStatus = await syncExpiredTechnicalWindow(student, invitation);
 
   res.json({
@@ -412,6 +402,7 @@ router.get("/assessment/:driveId", requireStudent, async (req, res) => {
     return res.status(404).json({ message: "Assessment drive is not available" });
   }
 
+  await checkAndAutoPromoteStudent(student, drive, company, invitation);
   const technicalAssessmentStatus = await syncExpiredTechnicalWindow(student, invitation);
 
   res.json({
@@ -570,42 +561,37 @@ router.post("/assessment/complete", requireStudent, async (req, res) => {
   const hasOralRound = Array.isArray(drive.rounds) && drive.rounds.includes("Technical Oral");
   const completedAt = new Date();
 
-  // If candidate qualifies for the Technical Oral Round, stop after aptitude.
-  // The company must explicitly shortlist the candidate before technical access opens.
+  // If candidate qualifies for the Technical Oral Round, automatically promote and send invitation mail directly
   if (isAptitudeQualified && hasOralRound) {
     student.score = score;
     student.aptitudeScore = score;
     student.answers = answers;
     student.assessmentStatus = "Completed";
     student.completedAt = completedAt;
-    student.currentRound = "Aptitude";
-    student.technicalOralStatus = "Not Started";
-    student.technicalAssessmentStatus = "Not Selected";
     student.result = "Pending";
-    await student.save();
 
-    await Invitation.findOneAndUpdate(
-      { student: student._id, drive: student.drive },
-      {
-        assessmentStatus: "Completed",
-        completedAt,
-        aptitudeScore: score,
-        score,
-        currentRound: "Aptitude",
-        technicalOralStatus: "Not Started",
-        technicalAssessmentStatus: "Not Selected",
-        answers,
-        result: "Pending",
-      }
-    );
+    const company = await Company.findById(drive.company);
+    const invitation = await Invitation.findOne({ student: student._id, drive: student.drive });
+
+    if (invitation) {
+      invitation.score = score;
+      invitation.aptitudeScore = score;
+      invitation.answers = answers;
+      invitation.assessmentStatus = "Completed";
+      invitation.completedAt = completedAt;
+      invitation.result = "Pending";
+      await invitation.save();
+    }
+
+    await promoteStudentToTechnicalAssessment({ student, drive, company, invitation });
 
     return res.json({
-      message: "Aptitude Assessment Completed. Your results will be reviewed by the company. If shortlisted, you will receive a separate Technical Assessment email.",
+      message: "Congratulations! You cleared the Aptitude cutoff and have been directly invited to the Technical Oral Round. The assessment details have been sent to your email.",
       score,
       result: "Pending",
       isAptitudeQualified: true,
-      qualifiedForOral: false,
-      nextRound: null,
+      qualifiedForOral: true,
+      nextRound: "Technical Oral",
       completedAt,
     });
   }
@@ -664,12 +650,16 @@ router.post("/oral/start", requireStudent, async (req, res) => {
     }
 
     const invitation = await Invitation.findOne({ student: student._id, drive: drive._id });
-    const startsAt = invitation?.technicalAssessmentAccessStartsAt || student.technicalAssessmentAccessStartsAt;
-    const expiresAt = invitation?.technicalAssessmentAccessExpiresAt || student.technicalAssessmentAccessExpiresAt;
-    const technicalState = await syncExpiredTechnicalWindow(student, invitation);
+    let startsAt = invitation?.technicalAssessmentAccessStartsAt || student.technicalAssessmentAccessStartsAt;
+    let expiresAt = invitation?.technicalAssessmentAccessExpiresAt || student.technicalAssessmentAccessExpiresAt;
+    let technicalState = await syncExpiredTechnicalWindow(student, invitation);
 
     if (!startsAt || !expiresAt || technicalState === "Not Selected") {
-      return res.status(403).json({ message: "You have not been shortlisted for the Technical Assessment yet." });
+      const company = await Company.findById(drive.company);
+      await promoteStudentToTechnicalAssessment({ student, drive, company, invitation });
+      startsAt = student.technicalAssessmentAccessStartsAt;
+      expiresAt = student.technicalAssessmentAccessExpiresAt;
+      technicalState = "Active";
     }
 
     const now = new Date();

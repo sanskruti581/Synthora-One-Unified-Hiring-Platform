@@ -77,7 +77,7 @@ export default function Assessment() {
   const [isAutoSubmitted, setIsAutoSubmitted] = useState(false);
   const [copyPasteToast, setCopyPasteToast] = useState<string | null>(null);
   const [isDemoMode, setIsDemoMode] = useState(Boolean(typeof window !== "undefined" && !window.localStorage.getItem("synthora-token")));
-  const [oralQualifiedModal] = useState<{ score: number } | null>(null);
+  const [oralQualifiedModal, setOralQualifiedModal] = useState<{ score: number } | null>(null);
   const hasSubmittedRef = useRef(false);
   const violationCountRef = useRef(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -125,6 +125,10 @@ export default function Assessment() {
 
     try {
       const response = await submitAssessment(score, answers);
+      if (response.data.qualifiedForOral) {
+        setOralQualifiedModal({ score });
+        return;
+      }
       setMessage(response.data.message || `Aptitude Assessment Completed. Score: ${score}.`);
       window.setTimeout(() => navigate("/student/dashboard"), 1800);
     } catch {

@@ -8,12 +8,17 @@ import Invitation from "../models/Invitation.js";
 import { requireCompany } from "../middleware/auth.js";
 import { parseStudentFile } from "../utils/parseStudentFile.js";
 import { createInvitationToken, createStudentPassword, getExamStartDate } from "../utils/tokens.js";
-import { sendStudentInvitationEmail, sendTechnicalAssessmentInvitationEmail } from "../utils/mailer.js";
+import { sendStudentInvitationEmail } from "../utils/mailer.js";
+import {
+  getTechnicalAssessmentState,
+  promoteStudentToTechnicalAssessment,
+  autoPromoteQualifiedStudentsForDrive,
+  TECHNICAL_ACCESS_WINDOW_MS,
+} from "../utils/technicalAssessment.js";
 import TechnicalOralInterview from "../models/TechnicalOralInterview.js";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
-const TECHNICAL_ACCESS_WINDOW_MS = 4 * 60 * 60 * 1000;
 
 function toPublicDrive(drive) {
   const data = drive.toObject();
@@ -48,36 +53,7 @@ function buildStats(students) {
   };
 }
 
-function getTechnicalAssessmentState(student, invitation) {
-  if (student.technicalAssessmentStatus === "Completed" || student.technicalOralStatus === "Completed") {
-    return "Completed";
-  }
 
-  const startsAt = invitation?.technicalAssessmentAccessStartsAt || student.technicalAssessmentAccessStartsAt;
-  const expiresAt = invitation?.technicalAssessmentAccessExpiresAt || student.technicalAssessmentAccessExpiresAt;
-
-  if (!startsAt || !expiresAt || student.technicalAssessmentStatus === "Not Selected") {
-    return "Not Selected";
-  }
-
-  const now = Date.now();
-  const startTime = new Date(startsAt).getTime();
-  const expiryTime = new Date(expiresAt).getTime();
-
-  if (Number.isFinite(expiryTime) && now > expiryTime) {
-    return "Expired";
-  }
-
-  if (Number.isFinite(startTime) && now < startTime) {
-    return "Shortlisted";
-  }
-
-  if (student.technicalOralStatus === "In Progress") {
-    return "In Progress";
-  }
-
-  return "Active";
-}
 
 function csvEscape(value) {
   const text = value === null || value === undefined ? "" : String(value);
@@ -310,6 +286,7 @@ router.get("/", requireCompany, async (req, res) => {
 
 router.get("/:driveId", requireCompany, async (req, res) => {
   const drive = await HiringDrive.findOne({ _id: req.params.driveId, company: req.companyId });
+  const company = await Company.findById(req.companyId);
 
   if (!drive) {
     return res.status(404).json({ message: "Hiring drive not found" });
@@ -317,6 +294,8 @@ router.get("/:driveId", requireCompany, async (req, res) => {
 
   const invitations = await Invitation.find({ drive: drive._id }).sort({ createdAt: 1 });
   const students = await Student.find({ drive: drive._id }).sort({ createdAt: 1 });
+
+  await autoPromoteQualifiedStudentsForDrive(drive, students, invitations, company);
   const invitationByStudentId = new Map(invitations.map((invitation) => [String(invitation.student), invitation]));
   const studentRows = students.map((student) => {
     const invitation = invitationByStudentId.get(String(student._id));
@@ -389,54 +368,7 @@ router.post("/:driveId/technical-assessment/:studentId/invite", requireCompany, 
       return res.status(404).json({ message: "Student invitation record not found" });
     }
 
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + TECHNICAL_ACCESS_WINDOW_MS);
-    const clientUrl = process.env.CLIENT_URL || "http://localhost:5173";
-    const assessmentLink = `${clientUrl}/student/dashboard`;
-
-    student.currentRound = "Technical Oral";
-    student.technicalAssessmentStatus = "Active";
-    student.technicalAssessmentInvitedAt = now;
-    student.technicalAssessmentAccessStartsAt = now;
-    student.technicalAssessmentAccessExpiresAt = expiresAt;
-    student.technicalOralStatus = student.technicalOralStatus === "In Progress" ? "In Progress" : "Not Started";
-
-    invitation.currentRound = "Technical Oral";
-    invitation.technicalAssessmentStatus = "Active";
-    invitation.technicalAssessmentInvitedAt = now;
-    invitation.technicalAssessmentAccessStartsAt = now;
-    invitation.technicalAssessmentAccessExpiresAt = expiresAt;
-    invitation.technicalOralStatus = invitation.technicalOralStatus === "In Progress" ? "In Progress" : "Not Started";
-
-    try {
-      const mailResult = await sendTechnicalAssessmentInvitationEmail({
-        to: student.email,
-        studentName: student.name,
-        companyName: company.companyName,
-        driveName: drive.driveName,
-        jobRole: drive.jobRole,
-        accessStartsAt: now,
-        accessExpiresAt: expiresAt,
-        assessmentLink,
-      });
-
-      student.technicalAssessmentEmailStatus = mailResult.status;
-      student.technicalAssessmentEmailSent = mailResult.status === "sent";
-      student.technicalAssessmentEmailError = undefined;
-      invitation.technicalAssessmentEmailStatus = mailResult.status;
-      invitation.technicalAssessmentEmailSent = mailResult.status === "sent";
-      invitation.technicalAssessmentEmailError = undefined;
-    } catch (error) {
-      student.technicalAssessmentEmailStatus = "failed";
-      student.technicalAssessmentEmailSent = false;
-      student.technicalAssessmentEmailError = error.message;
-      invitation.technicalAssessmentEmailStatus = "failed";
-      invitation.technicalAssessmentEmailSent = false;
-      invitation.technicalAssessmentEmailError = error.message;
-    }
-
-    await student.save();
-    await invitation.save();
+    await promoteStudentToTechnicalAssessment({ student, drive, company, invitation });
 
     return res.json({
       message: "Technical Assessment invitation activated",
