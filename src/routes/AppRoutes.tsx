@@ -33,6 +33,3 @@ export default function AppRoutes() {
     </Routes>
   );
 }
-    </Routes>
-  );
-}

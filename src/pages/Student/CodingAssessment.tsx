@@ -630,7 +630,7 @@ export default function CodingAssessment() {
               language={activeSolution?.language === "python" ? "python" : "javascript"}
               theme={isDarkMode ? "vs-dark" : "light"}
               value={activeSolution?.code || ""}
-              onChange={(val) => {
+              onChange={(val: string | undefined) => {
                 if (activeQuestionId && val !== undefined) {
                   setSolutions(prev => ({
                     ...prev,

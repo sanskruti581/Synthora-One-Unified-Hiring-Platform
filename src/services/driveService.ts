@@ -98,7 +98,6 @@ export type DriveStudent = {
   technicalAssessmentEmailStatus?: string;
   result: string;
   currentRound?: string;
-  aptitudeScore?: number | null;
   codingScore?: number | null;
   overallScore?: number | null;
   roundResults?: { roundName: string; status: string; score?: number | null }[];

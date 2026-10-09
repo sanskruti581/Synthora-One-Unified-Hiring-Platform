@@ -76,6 +76,7 @@ export default function Assessment() {
   const [violationCount, setViolationCount] = useState(0);
   const [isAutoSubmitted, setIsAutoSubmitted] = useState(false);
   const [isDemoMode, setIsDemoMode] = useState(Boolean(typeof window !== "undefined" && !window.localStorage.getItem("synthora-token")));
+  const [copyPasteToast, setCopyPasteToast] = useState<string | null>(null);
   const [completionResult, setCompletionResult] = useState<{ score: number; isAptitudeQualified: boolean; nextRound?: string | null } | null>(null);
   const hasSubmittedRef = useRef(false);
   const violationCountRef = useRef(0);
