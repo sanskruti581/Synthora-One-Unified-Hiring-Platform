@@ -16,7 +16,6 @@ function buildFallbackAssessment(driveId: string): AssessmentData {
     startedAt: undefined,
     examStartAt,
     examEndAt: undefined,
-    loginWindowOpenAt: new Date(now.getTime() - 2 * 60 * 1000).toISOString(),
     canStartAssessment: true,
     answers: {},
   };
@@ -35,6 +34,15 @@ function isFallbackError(error: unknown) {
   return typeof window !== "undefined" && !window.navigator.onLine;
 }
 
+export type RoundResult = {
+  roundName: string;
+  status: string;
+  score?: number | null;
+  maxScore?: number | null;
+  startedAt?: string;
+  completedAt?: string;
+};
+
 export type StudentDashboardData = {
   companyName: string;
   driveName: string;
@@ -51,6 +59,8 @@ export type StudentDashboardData = {
   completedAt?: string;
   score?: number | null;
   aptitudeScore?: number | null;
+  codingScore?: number | null;
+  overallScore?: number | null;
   technicalOralScore?: number | null;
   technicalOralStatus?: string;
   technicalAssessmentStatus?: string;
@@ -58,6 +68,7 @@ export type StudentDashboardData = {
   technicalAssessmentAccessStartsAt?: string;
   technicalAssessmentAccessExpiresAt?: string;
   currentRound?: string;
+  roundResults?: RoundResult[];
   result: string;
 };
 
@@ -73,13 +84,14 @@ export type AssessmentData = {
   startedAt?: string;
   examStartAt: string;
   examEndAt?: string;
-  loginWindowOpenAt: string;
   canStartAssessment: boolean;
   answers: Record<string, string>;
   rounds?: string[];
   aptitudeCutoff?: number;
   technicalOralCutoff?: number;
   aptitudeScore?: number | null;
+  codingScore?: number | null;
+  overallScore?: number | null;
   technicalOralScore?: number | null;
   technicalOralStatus?: string;
   technicalAssessmentStatus?: string;
@@ -87,6 +99,7 @@ export type AssessmentData = {
   technicalAssessmentAccessStartsAt?: string;
   technicalAssessmentAccessExpiresAt?: string;
   currentRound?: string;
+  roundResults?: RoundResult[];
 };
 
 export async function getStudentDashboard() {
@@ -159,3 +172,13 @@ export async function submitAssessment(score: number, answers: Record<string, st
   }
 }
 
+export async function completeAptitudeRound(driveId: string, score: number, answers: Record<string, string>) {
+  try {
+    return await api.post("/students/assessment/complete", { score, answers, round: "Aptitude" });
+  } catch (error) {
+    if (isFallbackError(error)) {
+      return { data: { result: score >= 60 ? "Qualified" : "Rejected", score, completedAt: new Date().toISOString() } } as { data: { result: string; score: number; completedAt: string; nextRound?: string } };
+    }
+    throw error;
+  }
+}

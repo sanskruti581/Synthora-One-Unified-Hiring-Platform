@@ -13,7 +13,7 @@ import {
   type HiringDrive,
 } from "../../../services/driveService";
 
-const filters = ["All Students", "Pending", "Completed", "Qualified", "Rejected"] as const;
+const filters = ["All Students", "Pending", "In Progress", "Aptitude Completed", "Coding Completed", "Completed", "Qualified", "Rejected"] as const;
 
 const emptyStats: DriveStats = {
   studentsInvited: 0,
@@ -59,18 +59,12 @@ export default function DriveDetails() {
   }, [driveId]);
 
   const visibleStudents = useMemo(() => {
-    if (filter === "All Students") {
-      return students;
-    }
-
-    if (filter === "Pending") {
-      return students.filter((student) => student.assessmentStatus !== "Completed");
-    }
-
-    if (filter === "Completed") {
-      return students.filter((student) => student.assessmentStatus === "Completed");
-    }
-
+    if (filter === "All Students") return students;
+    if (filter === "Pending") return students.filter((student) => student.assessmentStatus !== "Completed");
+    if (filter === "In Progress") return students.filter((student) => student.assessmentStatus === "Started" || student.assessmentStatus === "In Progress");
+    if (filter === "Aptitude Completed") return students.filter(s => s.roundResults?.some(r => r.roundName === "Aptitude" && r.status === "Completed"));
+    if (filter === "Coding Completed") return students.filter(s => s.roundResults?.some(r => r.roundName === "Coding" && r.status === "Completed"));
+    if (filter === "Completed") return students.filter((student) => student.assessmentStatus === "Completed");
     return students.filter((student) => student.result === filter);
   }, [filter, students]);
 
@@ -214,7 +208,7 @@ export default function DriveDetails() {
             <table className="min-w-[1280px] w-full text-left text-sm">
               <thead className="bg-blue-50/80 text-xs uppercase text-synthora-muted">
                 <tr>
-                  {["Student Name", "Email", "Aptitude Status", "Aptitude Score", "Aptitude Result", "Technical Status", "Technical Window", "Technical Score", "Technical Action", "Final Result", "Viva Interview"].map((heading) => (
+                  {["Student Name", "Email", "Current Round", "Assessment Status", "Aptitude Score", "Coding Score", "Technical Score", "Technical Status", "Final Result", "Actions / Viva"].map((heading) => (
                     <th key={heading} className="px-4 py-3 font-extrabold">
                       {heading}
                     </th>
@@ -226,18 +220,18 @@ export default function DriveDetails() {
                   <tr key={student._id} className="transition hover:bg-blue-50/50">
                     <td className="px-4 py-3 font-bold text-synthora-text">{student.studentName || "Student"}</td>
                     <td className="px-4 py-3 text-synthora-muted">{student.email}</td>
+                    <td className="px-4 py-3">
+                      <span className="inline-block rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-extrabold text-synthora-blue">
+                        {student.currentRound ?? "Aptitude"}
+                      </span>
+                    </td>
                     <td className="px-4 py-3">{student.assessmentStatus}</td>
                     <td className="px-4 py-3 font-bold">{student.aptitudeScore ?? student.score ?? "-"}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-extrabold ${
-                        student.result === "Rejected"
-                          ? "bg-rose-50 text-rose-600"
-                          : student.aptitudeScore !== null && student.aptitudeScore !== undefined
-                            ? "bg-emerald-50 text-emerald-600"
-                            : "bg-slate-100 text-slate-600"
-                      }`}>
-                        {student.aptitudeScore !== null && student.aptitudeScore !== undefined ? "Aptitude Completed" : "Pending"}
-                      </span>
+                    <td className="px-4 py-3 font-bold text-indigo-600">{student.codingScore !== null && student.codingScore !== undefined ? student.codingScore : "-"}</td>
+                    <td className="px-4 py-3 font-bold text-sky-600">
+                      {student.technicalOralScore !== null && student.technicalOralScore !== undefined
+                        ? `${student.technicalOralScore}/100`
+                        : "-"}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-extrabold ${getTechnicalStatusClass(student.technicalAssessmentStatus)}`}>
@@ -248,29 +242,6 @@ export default function DriveDetails() {
                       ) : student.technicalAssessmentEmailStatus && student.technicalAssessmentStatus !== "Not Selected" ? (
                         <p className="mt-1 text-[11px] font-semibold text-slate-500">{student.technicalAssessmentEmailStatus}</p>
                       ) : null}
-                    </td>
-                    <td className="px-4 py-3 text-xs font-semibold text-synthora-muted">
-                      {student.technicalAssessmentAccessExpiresAt ? `Until ${formatDate(student.technicalAssessmentAccessExpiresAt)}` : "-"}
-                    </td>
-                    <td className="px-4 py-3 font-bold text-sky-600">
-                      {student.technicalOralScore !== null && student.technicalOralScore !== undefined
-                        ? `${student.technicalOralScore}/100`
-                        : "-"}
-                    </td>
-                    <td className="px-4 py-3">
-                      {canSelectForTechnical(student) ? (
-                        <button
-                          type="button"
-                          onClick={() => handleTechnicalInvite(student)}
-                          disabled={invitingStudentId === student._id}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60"
-                        >
-                          <UserCheck className="h-3.5 w-3.5" />
-                          {invitingStudentId === student._id ? "Selecting..." : "Select for Technical"}
-                        </button>
-                      ) : (
-                        <span className="text-xs text-slate-400">{getTechnicalActionText(student)}</span>
-                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-extrabold ${
@@ -283,7 +254,18 @@ export default function DriveDetails() {
                         {student.result}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 flex items-center gap-2">
+                      {canSelectForTechnical(student) ? (
+                        <button
+                          type="button"
+                          onClick={() => handleTechnicalInvite(student)}
+                          disabled={invitingStudentId === student._id}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60"
+                        >
+                          <UserCheck className="h-3.5 w-3.5" />
+                          {invitingStudentId === student._id ? "Selecting..." : "Select for Technical"}
+                        </button>
+                      ) : null}
                       {student.technicalOralScore !== null && student.technicalOralScore !== undefined ? (
                         <button
                           type="button"
@@ -293,9 +275,9 @@ export default function DriveDetails() {
                           <MessageSquare className="h-3.5 w-3.5" />
                           View Viva
                         </button>
-                      ) : (
-                        <span className="text-xs text-slate-400">Pending</span>
-                      )}
+                      ) : !canSelectForTechnical(student) ? (
+                        <span className="text-xs text-slate-400">{getTechnicalActionText(student)}</span>
+                      ) : null}
                     </td>
                   </tr>
                 ))}

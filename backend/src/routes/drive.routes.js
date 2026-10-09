@@ -34,7 +34,10 @@ function toPublicDrive(drive) {
 }
 
 function buildStats(students) {
-  const scores = students.map((student) => student.aptitudeScore ?? student.score).filter((score) => typeof score === "number");
+  const scores = students.map((student) => student.overallScore ?? student.aptitudeScore ?? student.score).filter((score) => typeof score === "number");
+  const aptitudeScores = students.map((student) => student.aptitudeScore ?? student.score).filter((score) => typeof score === "number");
+  const codingScores = students.map((student) => student.codingScore).filter((score) => typeof score === "number");
+
   const loggedInStudents = students.filter((student) => student.assessmentStatus === "Logged In").length;
   const startedStudents = students.filter((student) => student.assessmentStatus === "Started").length;
 
@@ -47,12 +50,12 @@ function buildStats(students) {
     averageScore: scores.length ? Math.round(scores.reduce((total, score) => total + score, 0) / scores.length) : 0,
     highestScore: scores.length ? Math.max(...scores) : 0,
     lowestScore: scores.length ? Math.min(...scores) : 0,
+    averageAptitudeScore: aptitudeScores.length ? Math.round(aptitudeScores.reduce((total, score) => total + score, 0) / aptitudeScores.length) : 0,
+    averageCodingScore: codingScores.length ? Math.round(codingScores.reduce((total, score) => total + score, 0) / codingScores.length) : 0,
     qualifiedStudents: students.filter((student) => student.result === "Qualified").length,
     rejectedStudents: students.filter((student) => student.result === "Rejected").length,
   };
 }
-
-
 
 function csvEscape(value) {
   const text = value === null || value === undefined ? "" : String(value);
@@ -61,18 +64,21 @@ function csvEscape(value) {
 
 function buildResultRows(students) {
   return [
-    ["Student Name", "Email", "Invitation Status", "Email Sent", "Assessment Status", "Started Time", "Completed Time", "Aptitude Score", "Technical Status", "Technical Score", "Result"],
+    ["Student Name", "Email", "Invitation Status", "Email Sent", "Assessment Status", "Current Round", "Started Time", "Completed Time", "Aptitude Score", "Coding Score", "Technical Score", "Technical Status", "Overall Score", "Result"],
     ...students.map((student) => [
       student.name,
       student.email,
       student.invitationStatus,
       student.emailSent ? "Yes" : "No",
       student.assessmentStatus,
-      student.startedAt ? student.startedAt.toISOString() : "",
-      student.completedAt ? student.completedAt.toISOString() : "",
+      student.currentRound || "Aptitude",
+      student.startedAt ? new Date(student.startedAt).toISOString() : "",
+      student.completedAt ? new Date(student.completedAt).toISOString() : "",
       student.aptitudeScore ?? student.score ?? "",
-      student.technicalAssessmentStatus ?? "Not Selected",
+      student.codingScore ?? "",
       student.technicalOralScore ?? "",
+      student.technicalAssessmentStatus ?? "Not Selected",
+      student.overallScore ?? student.score ?? "",
       student.result,
     ]),
   ];
@@ -310,8 +316,11 @@ router.get("/:driveId", requireCompany, async (req, res) => {
       assessmentStatus: student.assessmentStatus,
       startedAt: student.startedAt,
       completedAt: student.completedAt,
-      score: student.score,
+      currentRound: student.currentRound,
       aptitudeScore: student.aptitudeScore ?? student.score,
+      codingScore: student.codingScore,
+      overallScore: student.overallScore ?? student.score,
+      roundResults: student.roundResults,
       technicalOralScore: student.technicalOralScore,
       technicalOralStatus: student.technicalOralStatus || "Not Started",
       technicalAssessmentStatus,
@@ -358,6 +367,14 @@ router.post("/:driveId/technical-assessment/:studentId/invite", requireCompany, 
 
     if (aptitudeScore < Number(drive.aptitudeCutoff) || student.result === "Rejected") {
       return res.status(400).json({ message: "Student has not cleared the Aptitude cutoff" });
+    }
+
+    const driveRounds = Array.isArray(drive.rounds) ? drive.rounds : [];
+    if (driveRounds.includes("Coding")) {
+      const hasCodingDone = typeof student.codingScore === "number" || (student.roundResults && student.roundResults.some(r => r.roundName === "Coding" && r.status === "Completed"));
+      if (!hasCodingDone && student.currentRound !== "Technical Oral") {
+        return res.status(400).json({ message: "Student must complete and clear the Coding round before Technical Assessment" });
+      }
     }
 
     if (student.technicalOralStatus === "Completed" || student.technicalAssessmentStatus === "Completed") {

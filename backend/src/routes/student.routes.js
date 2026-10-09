@@ -8,9 +8,9 @@ import jwt from "jsonwebtoken";
 import { getExamStartDate } from "../utils/tokens.js";
 import TechnicalOralInterview from "../models/TechnicalOralInterview.js";
 import { generateOralQuestion, evaluateSpokenAnswer, generateFinalOralSummary } from "../services/aiService.js";
-
-import { getTechnicalAssessmentState } from "../utils/technicalAssessment.js";
+import { getTechnicalAssessmentState, promoteStudentToTechnicalAssessment } from "../utils/technicalAssessment.js";
 import { sendAptitudeClearedEmail } from "../utils/mailer.js";
+import { getNextRound, normalizeRoundName, calculateOverallScore, determineFinalResult, canAccessRound, getDriveRounds } from "../utils/roundUtils.js";
 
 const router = Router();
 
@@ -28,9 +28,8 @@ async function getInvitationPayload(token) {
   return { invitation, student, drive, company };
 }
 
-function getLoginWindowOpenAt(drive) {
-  return new Date(getExamStartDate(drive.examDate, drive.examTime).getTime() - 10 * 60 * 1000);
-}
+// Login is no longer restricted to a 10-minute window before the exam.
+// Students may log in as soon as their invitation is valid.
 
 function getExamEndDate(drive) {
   return new Date(getExamStartDate(drive.examDate, drive.examTime).getTime() + Number(drive.durationMinutes) * 60 * 1000);
@@ -181,7 +180,19 @@ async function completeOralInterview({ interview, studentId }) {
   student.technicalOralInterview = interview._id;
   student.assessmentStatus = "Completed";
   student.completedAt = completedAt;
-  student.result = finalResult;
+
+  // Record roundResults
+  student.roundResults = (student.roundResults || []).filter(r => normalizeRoundName(r.roundName) !== "Technical Oral");
+  student.roundResults.push({
+    roundName: "Technical Oral",
+    status: "Completed",
+    score: interview.overallScore,
+    maxScore: 100,
+    completedAt,
+  });
+
+  student.overallScore = calculateOverallScore(drive, student);
+  student.result = determineFinalResult(drive, student);
   await student.save();
 
   await Invitation.findOneAndUpdate(
@@ -192,11 +203,12 @@ async function completeOralInterview({ interview, studentId }) {
       technicalAssessmentStatus: "Completed",
       assessmentStatus: "Completed",
       completedAt,
-      result: finalResult,
+      overallScore: student.overallScore,
+      result: student.result,
     }
   );
 
-  return { summary, result: finalResult };
+  return { summary, result: student.result };
 }
 
 router.get("/invite/:token", async (req, res) => {
@@ -247,12 +259,16 @@ router.get("/invite/:token", async (req, res) => {
   }
   const examStartAt = getExamStartDate(drive.examDate, drive.examTime);
   const examEndAt = getExamEndDate(drive);
-  const loginWindowOpenAt = getLoginWindowOpenAt(drive);
 
   if (now > invitation.expiresAt && invitation.invitationStatus !== "Activated") {
     invitation.invitationStatus = "Expired";
     await invitation.save();
   }
+
+  // canLogin: students may log in any time before the exam window closes (or has expired)
+  const invitationExpired = now > invitation.expiresAt && invitation.invitationStatus !== "Activated";
+  const examClosed = now >= examEndAt;
+  const canLogin = !invitationExpired && !examClosed;
 
   return res.json({
     token: invitation.token,
@@ -268,11 +284,9 @@ router.get("/invite/:token", async (req, res) => {
     durationMinutes: drive.durationMinutes,
     status:
       invitation.assessmentStatus === "Completed"
-          ? "Completed"
-        : now >= examEndAt
+        ? "Completed"
+        : examClosed
           ? "Closed"
-        : now < loginWindowOpenAt
-          ? "Login Window Closed"
           : invitation.assessmentStatus === "Started"
             ? "Assessment Started"
             : "Ready to Begin",
@@ -280,12 +294,9 @@ router.get("/invite/:token", async (req, res) => {
     driveId: drive._id,
     examStartAt,
     examEndAt,
-    loginWindowOpenAt,
-    canLogin: now >= loginWindowOpenAt && now < examEndAt,
+    canLogin,
     canStartAssessment: now >= examStartAt && now < examEndAt,
-    loginCountdownSeconds: getCountdownSeconds(loginWindowOpenAt),
     examCountdownSeconds: getCountdownSeconds(examStartAt),
-    activationOpenAt: invitation.activationOpenAt,
     expiresAt: invitation.expiresAt,
   });
 });
@@ -348,22 +359,21 @@ router.post("/invite/:token/start", async (req, res) => {
     });
   }
   const examStartAt = getExamStartDate(drive.examDate, drive.examTime);
-  const loginWindowOpenAt = getLoginWindowOpenAt(drive);
+  const examEndAt = getExamEndDate(drive);
 
-  if (now > invitation.expiresAt) {
+  // Invitation expiry check (unchanged)
+  if (now > invitation.expiresAt && invitation.invitationStatus !== "Activated") {
     invitation.invitationStatus = "Expired";
     await invitation.save();
     return res.status(403).json({ message: "This invitation has expired" });
   }
 
-  if (now < loginWindowOpenAt) {
-    return res.status(403).json({
-      message: "The assessment login window has not opened yet.",
-      loginWindowOpenAt,
-      examStartAt,
-      loginCountdownSeconds: getCountdownSeconds(loginWindowOpenAt),
-    });
+  // Exam window closed check (unchanged)
+  if (now >= examEndAt) {
+    return res.status(403).json({ message: "The assessment window has already closed.", examEndAt });
   }
+
+  // No login-window restriction: students may log in any time before the exam window closes.
 
   student.isActive = true;
   student.activatedAt = student.activatedAt || now;
@@ -389,15 +399,25 @@ router.post("/invite/:token/start", async (req, res) => {
 
   const authToken = jwt.sign({ id: student._id, userType: "student" }, process.env.JWT_SECRET || "dev-secret", { expiresIn: "1d" });
 
+  const redirectUrl =
+    student.currentRound === "Technical Oral"
+      ? `/assessment/${drive._id}/oral`
+      : student.currentRound === "Coding"
+        ? `/coding/${drive._id}`
+        : `/assessment/${drive._id}`;
+
   res.json({
-    message: "Assessment started",
+    message: "Logged in successfully",
     token: authToken,
     driveId: drive._id,
     studentName: student.name,
     companyName: company.companyName,
     driveName: drive.driveName,
+    currentRound: student.currentRound,
+    redirectUrl,
     examStartAt,
-    loginWindowOpenAt,
+    examEndAt,
+    canStartAssessment: now >= examStartAt && now < examEndAt,
   });
 });
 
@@ -423,12 +443,8 @@ router.post("/activate/:token", async (req, res) => {
   }
 
   const now = new Date();
-  if (now < invitation.activationOpenAt) {
-    return res.status(403).json({
-      message: "This link opens 10 minutes before the exam starts",
-      activationOpenAt: invitation.activationOpenAt,
-    });
-  }
+  // Removed: login-window restriction that blocked activation until 10 min before exam.
+  // Students may activate their invitation as soon as the link is valid.
 
   if (now > invitation.expiresAt) {
     invitation.invitationStatus = "Expired";
@@ -487,12 +503,15 @@ router.get("/me/dashboard", requireStudent, async (req, res) => {
     currentRound: student.currentRound,
     score: student.score,
     aptitudeScore: student.aptitudeScore ?? student.score,
+    codingScore: student.codingScore,
+    overallScore: student.overallScore ?? student.score,
     technicalOralScore: student.technicalOralScore,
     technicalOralStatus: student.technicalOralStatus || "Not Started",
     technicalAssessmentStatus,
     technicalAssessmentInvitedAt: invitation?.technicalAssessmentInvitedAt || student.technicalAssessmentInvitedAt,
     technicalAssessmentAccessStartsAt: invitation?.technicalAssessmentAccessStartsAt || student.technicalAssessmentAccessStartsAt,
     technicalAssessmentAccessExpiresAt: invitation?.technicalAssessmentAccessExpiresAt || student.technicalAssessmentAccessExpiresAt,
+    roundResults: student.roundResults,
     result: student.result,
   });
 });
@@ -526,13 +545,14 @@ router.get("/assessment/:driveId", requireStudent, async (req, res) => {
     startedAt: student.startedAt,
     examStartAt: getExamStartDate(drive.examDate, drive.examTime),
     examEndAt: getExamEndDate(drive),
-    loginWindowOpenAt: getLoginWindowOpenAt(drive),
     canStartAssessment: new Date() >= getExamStartDate(drive.examDate, drive.examTime) && new Date() < getExamEndDate(drive),
     answers: student.answers instanceof Map ? Object.fromEntries(student.answers) : (student.answers || {}),
     rounds: drive.rounds,
     aptitudeCutoff: drive.aptitudeCutoff,
     technicalOralCutoff: drive.technicalOralCutoff || 60,
     aptitudeScore: student.aptitudeScore ?? student.score,
+    codingScore: student.codingScore,
+    overallScore: student.overallScore ?? student.score,
     technicalOralScore: student.technicalOralScore,
     technicalOralStatus: student.technicalOralStatus || "Not Started",
     technicalAssessmentStatus,
@@ -540,6 +560,7 @@ router.get("/assessment/:driveId", requireStudent, async (req, res) => {
     technicalAssessmentAccessStartsAt: invitation?.technicalAssessmentAccessStartsAt || student.technicalAssessmentAccessStartsAt,
     technicalAssessmentAccessExpiresAt: invitation?.technicalAssessmentAccessExpiresAt || student.technicalAssessmentAccessExpiresAt,
     currentRound: student.currentRound,
+    roundResults: student.roundResults,
   });
 });
 
@@ -685,38 +706,112 @@ router.post("/assessment/complete", requireStudent, async (req, res) => {
   const score = Number(req.body.score ?? 0);
   const isAptitudeQualified = score >= Number(drive.aptitudeCutoff);
   const completedAt = new Date();
-  const result = isAptitudeQualified ? "Qualified" : "Rejected";
 
-  student.assessmentStatus = "Completed";
-  student.completedAt = completedAt;
+  // Save basic aptitude info
   student.answers = answers;
   student.score = score;
   student.aptitudeScore = score;
-  student.result = result;
-  await student.save();
 
-  if (invitation) {
-    invitation.assessmentStatus = "Completed";
-    invitation.completedAt = completedAt;
-    invitation.answers = answers;
-    invitation.score = score;
-    invitation.aptitudeScore = score;
-    invitation.result = result;
-    await invitation.save();
-  }
-
-  if (isAptitudeQualified) {
-    await sendAptitudeClearedEmailOnce({ student, invitation, drive, company, score });
-  }
-
-  res.json({
-    message: "Aptitude Assessment Completed",
-    score,
-    result,
-    isAptitudeQualified,
-    qualifiedForOral: false,
-    completedAt,
+  // Add round result for Aptitude
+  student.roundResults = (student.roundResults || []).filter(r => normalizeRoundName(r.roundName) !== "Aptitude");
+  student.roundResults.push({
+    roundName: "Aptitude",
+    status: "Completed",
+    score: score,
+    maxScore: (Object.keys(answers).length || 0) * 20 || 100,
+    completedAt: completedAt,
   });
+
+  if (!isAptitudeQualified) {
+    student.assessmentStatus = "Completed";
+    student.completedAt = completedAt;
+    student.result = "Rejected";
+    student.currentRound = "Aptitude";
+    student.overallScore = calculateOverallScore(drive, student);
+    await student.save();
+
+    if (invitation) {
+      invitation.assessmentStatus = "Completed";
+      invitation.completedAt = completedAt;
+      invitation.answers = answers;
+      invitation.score = score;
+      invitation.aptitudeScore = score;
+      invitation.result = "Rejected";
+      await invitation.save();
+    }
+
+    return res.json({
+      message: "Aptitude Assessment Completed. Cutoff not cleared.",
+      score,
+      result: "Rejected",
+      isAptitudeQualified: false,
+      nextRound: null,
+      completedAt,
+    });
+  }
+
+  // Aptitude cleared!
+  try {
+    await sendAptitudeClearedEmailOnce({ student, invitation, drive, company, score });
+  } catch (err) {
+    console.warn("Could not send aptitude cleared email:", err?.message);
+  }
+
+  const nextRound = getNextRound(drive, "Aptitude");
+
+  if (nextRound) {
+    student.currentRound = nextRound;
+    student.result = "Pending";
+
+    if (nextRound === "Technical Oral") {
+      await promoteStudentToTechnicalAssessment({ student, drive, company, invitation });
+    }
+
+    await student.save();
+
+    if (invitation) {
+      invitation.currentRound = nextRound;
+      invitation.answers = answers;
+      invitation.score = score;
+      invitation.aptitudeScore = score;
+      invitation.result = "Pending";
+      await invitation.save();
+    }
+
+    return res.json({
+      message: `Aptitude round completed! Next round is ${nextRound}.`,
+      score,
+      result: "Qualified",
+      isAptitudeQualified: true,
+      nextRound,
+      completedAt,
+    });
+  } else {
+    student.assessmentStatus = "Completed";
+    student.completedAt = completedAt;
+    student.result = "Qualified";
+    student.overallScore = calculateOverallScore(drive, student);
+    await student.save();
+
+    if (invitation) {
+      invitation.assessmentStatus = "Completed";
+      invitation.completedAt = completedAt;
+      invitation.answers = answers;
+      invitation.score = score;
+      invitation.aptitudeScore = score;
+      invitation.result = "Qualified";
+      await invitation.save();
+    }
+
+    return res.json({
+      message: "Assessment result stored",
+      score,
+      result: "Qualified",
+      isAptitudeQualified: true,
+      nextRound: null,
+      completedAt,
+    });
+  }
 });
 
 // ==========================================
@@ -740,11 +835,9 @@ router.post("/oral/start", requireStudent, async (req, res) => {
       return res.status(400).json({ message: "Technical Oral Round is not configured for this hiring drive" });
     }
 
-    // Check if candidate qualified aptitude round
-    const aptitudeScore = student.aptitudeScore ?? student.score ?? 0;
-    const isAptitudeQualified = aptitudeScore >= Number(drive.aptitudeCutoff);
-    if (!isAptitudeQualified) {
-      return res.status(403).json({ message: "You are not qualified for the Technical Oral Round" });
+    // Validate candidate has completed and qualified all previous rounds (Aptitude -> Coding)
+    if (!canAccessRound(drive, student, "Technical Oral") || student.result === "Rejected") {
+      return res.status(403).json({ message: "You must complete and qualify previous rounds before accessing the Technical Oral Round" });
     }
 
     const invitation = await Invitation.findOne({ student: student._id, drive: drive._id });
@@ -753,10 +846,18 @@ router.post("/oral/start", requireStudent, async (req, res) => {
     let technicalState = await syncExpiredTechnicalWindow(student, invitation);
 
     if (!startsAt || !expiresAt || technicalState === "Not Selected") {
-      return res.status(403).json({
-        message: "You have not been invited to the Technical Assessment yet.",
-        technicalAssessmentStatus: "Not Selected",
-      });
+      if (student.currentRound === "Technical Oral" || canAccessRound(drive, student, "Technical Oral")) {
+        const company = await Company.findById(drive.company);
+        await promoteStudentToTechnicalAssessment({ student, drive, company, invitation });
+        startsAt = student.technicalAssessmentAccessStartsAt;
+        expiresAt = student.technicalAssessmentAccessExpiresAt;
+        technicalState = "Active";
+      } else {
+        return res.status(403).json({
+          message: "You have not been invited to the Technical Assessment yet.",
+          technicalAssessmentStatus: "Not Selected",
+        });
+      }
     }
 
     const now = new Date();

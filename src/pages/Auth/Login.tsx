@@ -32,7 +32,7 @@ export default function Login() {
         ? error.response?.data?.message
         : "";
 
-      setError(message || "Login failed. Student login opens only after invitation activation and 10 minutes before the exam.");
+      setError(message || "Login failed. Please check your credentials and try again.");
     } finally {
       setIsSubmitting(false);
     }

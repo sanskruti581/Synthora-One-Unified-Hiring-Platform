@@ -5,7 +5,7 @@ import DashboardLayout from "../../../layouts/DashboardLayout";
 import FormField from "../../../components/FormField";
 import { createHiringDrive } from "../../../services/driveService";
 
-const rounds = ["Aptitude", "Technical Oral", "Coding", "HR"];
+const rounds = ["Aptitude", "Coding", "Technical Oral", "HR"];
 
 const initialDrive = {
   driveName: "",
@@ -15,7 +15,7 @@ const initialDrive = {
   examDate: "",
   examTime: "",
   durationMinutes: "",
-  rounds: ["Aptitude", "Technical Oral", "Coding", "HR"],
+  rounds: ["Aptitude", "Coding", "Technical Oral"],
   aptitudeCutoff: "",
   technicalOralCutoff: "60",
   lastRegistrationDate: "",

@@ -4,7 +4,7 @@ import { AlertTriangle, ArrowLeft, ArrowRight, Camera, CheckCircle2, Clock3, Max
 import ThemeToggle from "../../components/ThemeToggle";
 import { ProctoringGuard } from "../../components/ProctoringGuard";
 import { ProctoringReport } from "../../components/ProctoringReport";
-import { getAssessment, saveAssessmentAnswers, startAssessmentForDrive, submitAssessment, type AssessmentData } from "../../services/studentService";
+import { getAssessment, saveAssessmentAnswers, startAssessmentForDrive, submitAssessment, completeAptitudeRound, type AssessmentData } from "../../services/studentService";
 import { useCountdown } from "../../hooks/useCountdown";
 import { useDeviceDetection } from "../../hooks/useDeviceDetection";
 import { useFaceDetection } from "../../hooks/useFaceDetection";
@@ -75,9 +75,8 @@ export default function Assessment() {
   const [proctoringViolations, setProctoringViolations] = useState<ProctoringViolation[]>([]);
   const [violationCount, setViolationCount] = useState(0);
   const [isAutoSubmitted, setIsAutoSubmitted] = useState(false);
-  const [copyPasteToast, setCopyPasteToast] = useState<string | null>(null);
   const [isDemoMode, setIsDemoMode] = useState(Boolean(typeof window !== "undefined" && !window.localStorage.getItem("synthora-token")));
-  const [completionResult, setCompletionResult] = useState<{ score: number; isAptitudeQualified: boolean } | null>(null);
+  const [completionResult, setCompletionResult] = useState<{ score: number; isAptitudeQualified: boolean; nextRound?: string | null } | null>(null);
   const hasSubmittedRef = useRef(false);
   const violationCountRef = useRef(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -125,9 +124,12 @@ export default function Assessment() {
 
     try {
       const response = await submitAssessment(score, answers);
+      const isQualified = Boolean(response.data.isAptitudeQualified || response.data.result === "Qualified");
+      const nextRound = response.data.nextRound;
       setCompletionResult({
         score: response.data.score ?? score,
-        isAptitudeQualified: Boolean(response.data.isAptitudeQualified),
+        isAptitudeQualified: isQualified,
+        nextRound,
       });
       setMessage(response.data.message || `Aptitude Assessment Completed. Score: ${score}.`);
     } catch {
@@ -136,7 +138,7 @@ export default function Assessment() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [answers, navigate, score]);
+  }, [answers, navigate, score, driveId]);
 
   const addViolation = useCallback(async (type: string, message: string, metadata?: Record<string, unknown>) => {
     const currentState = { violationCount: violationCountRef.current, autoSubmitted: isAutoSubmitted };
@@ -458,7 +460,7 @@ export default function Assessment() {
 
       <section className="mx-auto mt-8 grid max-w-6xl gap-6 lg:grid-cols-[0.72fr_1.28fr]">
         <aside className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/10">
-          <p className="text-xs font-extrabold uppercase text-sky-600 dark:text-sky-300">Aptitude Assessment</p>
+          <p className="text-xs font-extrabold uppercase text-sky-600 dark:text-sky-300">{assessment?.currentRound ? `${assessment.currentRound} Assessment` : "Aptitude Assessment"}</p>
           <h1 className="mt-2 text-2xl font-extrabold text-slate-950 dark:text-white">{assessment?.driveName ?? "Assessment"}</h1>
           <div className="mt-5 grid gap-3 text-sm">
             <Info label="Student Name" value={assessment?.studentName ?? "-"} />
@@ -534,7 +536,7 @@ export default function Assessment() {
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <Info label="Company" value={assessment?.companyName ?? "-"} />
                   <Info label="Candidate Name" value={assessment?.studentName ?? "-"} />
-                  <Info label="Round" value="APTITUDE" />
+                  <Info label="Round" value={assessment?.currentRound ? assessment.currentRound.toUpperCase() : "APTITUDE"} />
                   <Info label="Exam Time" value={`${assessment?.examDate ?? "-"} ${assessment?.examTime ?? ""}`} />
                 </div>
               </div>
@@ -718,9 +720,32 @@ export default function Assessment() {
               </p>
             </div>
             <p className="mt-4 text-sm leading-6 text-slate-300">
-              Your result has been submitted successfully. If you meet the required cutoff, you will receive an email with the next-round details.
+              {completionResult.isAptitudeQualified
+                ? completionResult.nextRound === "Coding"
+                  ? "Congratulations! You have qualified for the Coding Round. Click below to begin your coding assessment."
+                  : completionResult.nextRound === "Technical Oral"
+                    ? "Congratulations! You have qualified for the Technical Round (AI Viva). Click below to begin."
+                    : "Congratulations! You have cleared the Aptitude cutoff."
+                : "You did not meet the required cutoff for this assessment. Best wishes for future opportunities."}
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
+              {completionResult.isAptitudeQualified && completionResult.nextRound === "Coding" ? (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/coding/${driveId}`)}
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-6 text-sm font-extrabold text-slate-950 transition hover:bg-emerald-400 shadow-lg shadow-emerald-500/20"
+                >
+                  Proceed to Coding Round
+                </button>
+              ) : completionResult.isAptitudeQualified && completionResult.nextRound === "Technical Oral" ? (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/assessment/${driveId}/oral`)}
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-6 text-sm font-extrabold text-slate-950 transition hover:bg-emerald-400 shadow-lg shadow-emerald-500/20"
+                >
+                  Proceed to Technical Round
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => navigate("/student/dashboard")}
