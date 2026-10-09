@@ -83,6 +83,12 @@ export default function AssessmentDemo() {
           >
             Back to Home
           </Link>
+          <Link
+            to="/technical-oral-demo"
+            className="inline-flex items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#5A22E6] transition hover:-translate-y-0.5"
+          >
+            Technical Oral Demo
+          </Link>
         </div>
 
         <div className="mt-8 grid gap-4 rounded-[24px] border border-white/15 bg-white/10 p-4 sm:p-6">

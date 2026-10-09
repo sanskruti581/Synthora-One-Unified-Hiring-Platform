@@ -1,4 +1,4 @@
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import Home from "../pages/Home";
 import Login from "../pages/Auth/Login";
 import CompanyRegister from "../pages/Auth/CompanyRegister";
@@ -26,6 +26,7 @@ export default function AppRoutes() {
       <Route path="/student/dashboard" element={<StudentDashboard />} />
       <Route path="/assessment/:driveId" element={<Assessment />} />
       <Route path="/assessment/:driveId/oral" element={<TechnicalOralRound />} />
+      <Route path="/technical-oral-demo" element={<Navigate to="/assessment/demo/oral" replace />} />
       <Route path="/assessment-demo" element={<AssessmentDemo />} />
     </Routes>
   );

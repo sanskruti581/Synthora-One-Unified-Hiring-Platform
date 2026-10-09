@@ -48,7 +48,7 @@ export default function ActivateInvitation() {
     try {
       const response = await startInvitationAssessment(token);
       window.localStorage.setItem("synthora-token", response.data.token);
-      navigate(`/assessment/${response.data.driveId}`);
+      navigate(response.data.redirectUrl || `/assessment/${response.data.driveId}`);
     } catch (error) {
       setMessage("The assessment login window has not opened yet.");
     } finally {

@@ -78,5 +78,6 @@ export async function startInvitationAssessment(token: string) {
     studentName: string;
     companyName: string;
     driveName: string;
+    redirectUrl?: string;
   }>(`/students/invite/${token}/start`);
 }

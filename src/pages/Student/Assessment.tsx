@@ -77,7 +77,7 @@ export default function Assessment() {
   const [isAutoSubmitted, setIsAutoSubmitted] = useState(false);
   const [copyPasteToast, setCopyPasteToast] = useState<string | null>(null);
   const [isDemoMode, setIsDemoMode] = useState(Boolean(typeof window !== "undefined" && !window.localStorage.getItem("synthora-token")));
-  const [oralQualifiedModal, setOralQualifiedModal] = useState<{ score: number } | null>(null);
+  const [completionResult, setCompletionResult] = useState<{ score: number; isAptitudeQualified: boolean } | null>(null);
   const hasSubmittedRef = useRef(false);
   const violationCountRef = useRef(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -125,12 +125,11 @@ export default function Assessment() {
 
     try {
       const response = await submitAssessment(score, answers);
-      if (response.data.qualifiedForOral) {
-        setOralQualifiedModal({ score });
-        return;
-      }
+      setCompletionResult({
+        score: response.data.score ?? score,
+        isAptitudeQualified: Boolean(response.data.isAptitudeQualified),
+      });
       setMessage(response.data.message || `Aptitude Assessment Completed. Score: ${score}.`);
-      window.setTimeout(() => navigate("/student/dashboard"), 1800);
     } catch {
       hasSubmittedRef.current = false;
       setMessage("Could not submit assessment. Please try again.");
@@ -702,29 +701,32 @@ export default function Assessment() {
         </div>
       ) : null}
 
-      {oralQualifiedModal ? (
+      {completionResult ? (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-950/85 px-4 backdrop-blur-sm">
           <div className="w-full max-w-lg rounded-3xl border border-sky-400/30 bg-slate-900 p-8 text-white shadow-2xl shadow-sky-950/50 text-center">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-400 mb-4">
               <CheckCircle2 className="h-8 w-8 text-sky-400" />
             </div>
-            <p className="text-xs font-extrabold uppercase tracking-[0.24em] text-sky-300">Aptitude Cleared</p>
-            <h3 className="mt-2 text-2xl font-black">Congratulations!</h3>
-            <p className="mt-2 text-sm font-semibold text-emerald-400">
-              Aptitude Score: {oralQualifiedModal.score}/100 • Cutoff Cleared
-            </p>
+            <p className="text-xs font-extrabold uppercase tracking-[0.24em] text-sky-300">Aptitude Assessment Completed</p>
+            <h3 className="mt-2 text-2xl font-black">Your result has been submitted</h3>
+            <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 text-left">
+              <p className="text-sm font-semibold text-slate-300">Your score: <span className="font-black text-white">{completionResult.score}/100</span></p>
+              <p className="mt-2 text-sm font-semibold text-slate-300">
+                Result: <span className={completionResult.isAptitudeQualified ? "font-black text-emerald-300" : "font-black text-rose-300"}>
+                  {completionResult.isAptitudeQualified ? "Cleared" : "Not Cleared"}
+                </span>
+              </p>
+            </div>
             <p className="mt-4 text-sm leading-6 text-slate-300">
-              You have qualified for the <strong>Technical Oral Round (AI Viva)</strong>.
-              The next round will evaluate your technical knowledge, problem-solving ability, and communication through spoken questions.
+              Your result has been submitted successfully. If you meet the required cutoff, you will receive an email with the next-round details.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
               <button
                 type="button"
-                onClick={() => navigate(`/assessment/${driveId}/oral`)}
+                onClick={() => navigate("/student/dashboard")}
                 className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-sky-500 px-6 text-sm font-extrabold text-slate-950 transition hover:bg-sky-400 shadow-lg shadow-sky-500/20"
               >
-                Start Technical Oral Round
-                <ArrowRight className="h-4 w-4" />
+                Go to Dashboard
               </button>
             </div>
           </div>

@@ -9,11 +9,8 @@ import { getExamStartDate } from "../utils/tokens.js";
 import TechnicalOralInterview from "../models/TechnicalOralInterview.js";
 import { generateOralQuestion, evaluateSpokenAnswer, generateFinalOralSummary } from "../services/aiService.js";
 
-import {
-  getTechnicalAssessmentState,
-  promoteStudentToTechnicalAssessment,
-  TECHNICAL_ACCESS_WINDOW_MS,
-} from "../utils/technicalAssessment.js";
+import { getTechnicalAssessmentState } from "../utils/technicalAssessment.js";
+import { sendAptitudeClearedEmail } from "../utils/mailer.js";
 
 const router = Router();
 
@@ -55,20 +52,6 @@ function countAnsweredQuestions(interview) {
   return interview.questions.filter((question) => question.score !== null && question.score !== undefined).length;
 }
 
-async function checkAndAutoPromoteStudent(student, drive, company, invitation) {
-  if (!student || !drive) return;
-  const aptitudeScore = student.aptitudeScore ?? student.score;
-  const isAptitudeQualified = typeof aptitudeScore === "number" && aptitudeScore >= Number(drive.aptitudeCutoff);
-  const hasOralRound = Array.isArray(drive.rounds) && drive.rounds.includes("Technical Oral");
-  const notYetInvited = !student.technicalAssessmentStatus || student.technicalAssessmentStatus === "Not Selected";
-
-  if (isAptitudeQualified && hasOralRound && notYetInvited && student.result !== "Rejected") {
-    await promoteStudentToTechnicalAssessment({ student, drive, company, invitation });
-  }
-}
-
-
-
 async function syncExpiredTechnicalWindow(student, invitation) {
   const state = getTechnicalAssessmentState(student, invitation);
 
@@ -85,6 +68,49 @@ async function syncExpiredTechnicalWindow(student, invitation) {
   }
 
   return state;
+}
+
+async function sendAptitudeClearedEmailOnce({ student, invitation, drive, company, score }) {
+  if (student.aptitudeClearedEmailSent || invitation?.aptitudeClearedEmailSent) {
+    return;
+  }
+
+  try {
+    const mailResult = await sendAptitudeClearedEmail({
+      to: student.email,
+      studentName: student.name,
+      companyName: company?.companyName || "the hiring team",
+      driveName: drive.driveName,
+      jobRole: drive.jobRole,
+      score,
+    });
+
+    student.aptitudeClearedEmailStatus = mailResult.status;
+    student.aptitudeClearedEmailSent = mailResult.status === "sent";
+    student.aptitudeClearedEmailError = undefined;
+
+    if (invitation) {
+      invitation.aptitudeClearedEmailStatus = mailResult.status;
+      invitation.aptitudeClearedEmailSent = mailResult.status === "sent";
+      invitation.aptitudeClearedEmailError = undefined;
+    }
+  } catch (error) {
+    console.error(`Failed to send aptitude cleared email to ${student.email}:`, error?.message || error);
+    student.aptitudeClearedEmailStatus = "failed";
+    student.aptitudeClearedEmailSent = false;
+    student.aptitudeClearedEmailError = error?.message || "Failed to send email";
+
+    if (invitation) {
+      invitation.aptitudeClearedEmailStatus = "failed";
+      invitation.aptitudeClearedEmailSent = false;
+      invitation.aptitudeClearedEmailError = error?.message || "Failed to send email";
+    }
+  }
+
+  await student.save();
+  if (invitation) {
+    await invitation.save();
+  }
 }
 
 function toOralSessionResponse(interview, extra = {}) {
@@ -182,6 +208,43 @@ router.get("/invite/:token", async (req, res) => {
 
   const { invitation, student, drive, company } = payload;
   const now = new Date();
+  const isTechnicalRound = invitation.currentRound === "Technical Oral" || student.currentRound === "Technical Oral";
+
+  if (isTechnicalRound) {
+    const techStartsAt = invitation.technicalAssessmentAccessStartsAt || student.technicalAssessmentAccessStartsAt || now;
+    const techExpiresAt = invitation.technicalAssessmentAccessExpiresAt || student.technicalAssessmentAccessExpiresAt || invitation.expiresAt;
+    const isTechCompleted = invitation.technicalOralStatus === "Completed" || student.technicalOralStatus === "Completed";
+    const isTechExpired = invitation.technicalAssessmentStatus === "Expired" || (techExpiresAt && now > new Date(techExpiresAt));
+    const canAccessTech = !isTechCompleted && !isTechExpired && now >= new Date(techStartsAt);
+
+    return res.json({
+      token: invitation.token,
+      invitationStatus: isTechExpired ? "Expired" : "Activated",
+      alreadyActivated: true,
+      email: student.email,
+      studentName: student.name,
+      driveName: drive.driveName,
+      jobRole: drive.jobRole,
+      companyName: company.companyName,
+      examDate: drive.examDate,
+      examTime: drive.examTime,
+      durationMinutes: 15,
+      status: isTechCompleted ? "Completed" : isTechExpired ? "Closed" : canAccessTech ? "Ready to Begin" : "Window Not Open",
+      roundName: "Technical Oral Round (AI Viva)",
+      driveId: drive._id,
+      examStartAt: techStartsAt,
+      examEndAt: techExpiresAt,
+      loginWindowOpenAt: techStartsAt,
+      canLogin: canAccessTech,
+      canStartAssessment: canAccessTech,
+      loginCountdownSeconds: 0,
+      examCountdownSeconds: 0,
+      activationOpenAt: techStartsAt,
+      expiresAt: techExpiresAt,
+      currentRound: "Technical Oral",
+      redirectUrl: `/assessment/${drive._id}/oral`,
+    });
+  }
   const examStartAt = getExamStartDate(drive.examDate, drive.examTime);
   const examEndAt = getExamEndDate(drive);
   const loginWindowOpenAt = getLoginWindowOpenAt(drive);
@@ -236,6 +299,54 @@ router.post("/invite/:token/start", async (req, res) => {
 
   const { invitation, student, drive, company } = payload;
   const now = new Date();
+  const isTechnicalRound = invitation.currentRound === "Technical Oral" || student.currentRound === "Technical Oral";
+
+  if (isTechnicalRound) {
+    const techStartsAt = invitation.technicalAssessmentAccessStartsAt || student.technicalAssessmentAccessStartsAt || now;
+    const techExpiresAt = invitation.technicalAssessmentAccessExpiresAt || student.technicalAssessmentAccessExpiresAt || invitation.expiresAt;
+    const isTechCompleted = invitation.technicalOralStatus === "Completed" || student.technicalOralStatus === "Completed";
+    const isTechExpired = invitation.technicalAssessmentStatus === "Expired" || (techExpiresAt && now > new Date(techExpiresAt));
+
+    if (isTechCompleted) {
+      return res.status(400).json({ message: "Technical Oral Round is already completed" });
+    }
+
+    if (isTechExpired) {
+      invitation.technicalAssessmentStatus = "Expired";
+      student.technicalAssessmentStatus = "Expired";
+      await Promise.all([invitation.save(), student.save()]);
+      return res.status(403).json({ message: "The Technical Assessment access window has expired" });
+    }
+
+    if (now < new Date(techStartsAt)) {
+      return res.status(403).json({ message: "The Technical Assessment access window is not open yet" });
+    }
+
+    student.isActive = true;
+    student.lastLogin = now;
+    student.currentRound = "Technical Oral";
+    await student.save();
+
+    invitation.invitationStatus = "Activated";
+    invitation.currentRound = "Technical Oral";
+    invitation.lastLogin = now;
+    await invitation.save();
+
+    const authToken = jwt.sign({ id: student._id, userType: "student" }, process.env.JWT_SECRET || "dev-secret", { expiresIn: "1d" });
+
+    return res.json({
+      message: "Technical Oral Round started",
+      token: authToken,
+      driveId: drive._id,
+      studentName: student.name,
+      companyName: company.companyName,
+      driveName: drive.driveName,
+      currentRound: "Technical Oral",
+      redirectUrl: `/assessment/${drive._id}/oral`,
+      examStartAt: techStartsAt,
+      loginWindowOpenAt: techStartsAt,
+    });
+  }
   const examStartAt = getExamStartDate(drive.examDate, drive.examTime);
   const loginWindowOpenAt = getLoginWindowOpenAt(drive);
 
@@ -357,7 +468,6 @@ router.get("/me/dashboard", requireStudent, async (req, res) => {
     return res.status(404).json({ message: "Student assessment drive is not available" });
   }
 
-  await checkAndAutoPromoteStudent(student, drive, company, invitation);
   const technicalAssessmentStatus = await syncExpiredTechnicalWindow(student, invitation);
 
   res.json({
@@ -402,7 +512,6 @@ router.get("/assessment/:driveId", requireStudent, async (req, res) => {
     return res.status(404).json({ message: "Assessment drive is not available" });
   }
 
-  await checkAndAutoPromoteStudent(student, drive, company, invitation);
   const technicalAssessmentStatus = await syncExpiredTechnicalWindow(student, invitation);
 
   res.json({
@@ -555,49 +664,29 @@ router.post("/assessment/complete", requireStudent, async (req, res) => {
     return res.status(404).json({ message: "Hiring drive not found" });
   }
 
-  const answers = req.body.answers && typeof req.body.answers === "object" ? req.body.answers : {};
-  const score = Number(req.body.score ?? 0);
-  const isAptitudeQualified = score >= Number(drive.aptitudeCutoff);
-  const hasOralRound = Array.isArray(drive.rounds) && drive.rounds.includes("Technical Oral");
-  const completedAt = new Date();
+  const company = await Company.findById(drive.company);
+  const invitation = await Invitation.findOne({ student: student._id, drive: student.drive });
+  const existingScore = student.aptitudeScore ?? student.score;
 
-  // If candidate qualifies for the Technical Oral Round, automatically promote and send invitation mail directly
-  if (isAptitudeQualified && hasOralRound) {
-    student.score = score;
-    student.aptitudeScore = score;
-    student.answers = answers;
-    student.assessmentStatus = "Completed";
-    student.completedAt = completedAt;
-    student.result = "Pending";
-
-    const company = await Company.findById(drive.company);
-    const invitation = await Invitation.findOne({ student: student._id, drive: student.drive });
-
-    if (invitation) {
-      invitation.score = score;
-      invitation.aptitudeScore = score;
-      invitation.answers = answers;
-      invitation.assessmentStatus = "Completed";
-      invitation.completedAt = completedAt;
-      invitation.result = "Pending";
-      await invitation.save();
-    }
-
-    await promoteStudentToTechnicalAssessment({ student, drive, company, invitation });
-
+  if (student.assessmentStatus === "Completed" && typeof existingScore === "number") {
+    const existingQualified = existingScore >= Number(drive.aptitudeCutoff);
     return res.json({
-      message: "Congratulations! You cleared the Aptitude cutoff and have been directly invited to the Technical Oral Round. The assessment details have been sent to your email.",
-      score,
-      result: "Pending",
-      isAptitudeQualified: true,
-      qualifiedForOral: true,
-      nextRound: "Technical Oral",
-      completedAt,
+      message: "Aptitude Assessment Completed",
+      score: existingScore,
+      result: student.result,
+      isAptitudeQualified: existingQualified,
+      qualifiedForOral: false,
+      nextRound: null,
+      completedAt: student.completedAt,
     });
   }
 
-  // Otherwise, finish directly
+  const answers = req.body.answers && typeof req.body.answers === "object" ? req.body.answers : {};
+  const score = Number(req.body.score ?? 0);
+  const isAptitudeQualified = score >= Number(drive.aptitudeCutoff);
+  const completedAt = new Date();
   const result = isAptitudeQualified ? "Qualified" : "Rejected";
+
   student.assessmentStatus = "Completed";
   student.completedAt = completedAt;
   student.answers = answers;
@@ -606,13 +695,22 @@ router.post("/assessment/complete", requireStudent, async (req, res) => {
   student.result = result;
   await student.save();
 
-  await Invitation.findOneAndUpdate(
-    { student: student._id, drive: student.drive },
-    { assessmentStatus: "Completed", completedAt, answers, score, aptitudeScore: score, result },
-  );
+  if (invitation) {
+    invitation.assessmentStatus = "Completed";
+    invitation.completedAt = completedAt;
+    invitation.answers = answers;
+    invitation.score = score;
+    invitation.aptitudeScore = score;
+    invitation.result = result;
+    await invitation.save();
+  }
+
+  if (isAptitudeQualified) {
+    await sendAptitudeClearedEmailOnce({ student, invitation, drive, company, score });
+  }
 
   res.json({
-    message: "Assessment result stored",
+    message: "Aptitude Assessment Completed",
     score,
     result,
     isAptitudeQualified,
@@ -655,11 +753,10 @@ router.post("/oral/start", requireStudent, async (req, res) => {
     let technicalState = await syncExpiredTechnicalWindow(student, invitation);
 
     if (!startsAt || !expiresAt || technicalState === "Not Selected") {
-      const company = await Company.findById(drive.company);
-      await promoteStudentToTechnicalAssessment({ student, drive, company, invitation });
-      startsAt = student.technicalAssessmentAccessStartsAt;
-      expiresAt = student.technicalAssessmentAccessExpiresAt;
-      technicalState = "Active";
+      return res.status(403).json({
+        message: "You have not been invited to the Technical Assessment yet.",
+        technicalAssessmentStatus: "Not Selected",
+      });
     }
 
     const now = new Date();

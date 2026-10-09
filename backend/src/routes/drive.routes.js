@@ -12,7 +12,6 @@ import { sendStudentInvitationEmail } from "../utils/mailer.js";
 import {
   getTechnicalAssessmentState,
   promoteStudentToTechnicalAssessment,
-  autoPromoteQualifiedStudentsForDrive,
   TECHNICAL_ACCESS_WINDOW_MS,
 } from "../utils/technicalAssessment.js";
 import TechnicalOralInterview from "../models/TechnicalOralInterview.js";
@@ -286,7 +285,6 @@ router.get("/", requireCompany, async (req, res) => {
 
 router.get("/:driveId", requireCompany, async (req, res) => {
   const drive = await HiringDrive.findOne({ _id: req.params.driveId, company: req.companyId });
-  const company = await Company.findById(req.companyId);
 
   if (!drive) {
     return res.status(404).json({ message: "Hiring drive not found" });
@@ -295,7 +293,6 @@ router.get("/:driveId", requireCompany, async (req, res) => {
   const invitations = await Invitation.find({ drive: drive._id }).sort({ createdAt: 1 });
   const students = await Student.find({ drive: drive._id }).sort({ createdAt: 1 });
 
-  await autoPromoteQualifiedStudentsForDrive(drive, students, invitations, company);
   const invitationByStudentId = new Map(invitations.map((invitation) => [String(invitation.student), invitation]));
   const studentRows = students.map((student) => {
     const invitation = invitationByStudentId.get(String(student._id));
@@ -357,6 +354,10 @@ router.post("/:driveId/technical-assessment/:studentId/invite", requireCompany, 
     const aptitudeScore = student.aptitudeScore ?? student.score;
     if (typeof aptitudeScore !== "number") {
       return res.status(400).json({ message: "Aptitude result is not available for this student yet" });
+    }
+
+    if (aptitudeScore < Number(drive.aptitudeCutoff) || student.result === "Rejected") {
+      return res.status(400).json({ message: "Student has not cleared the Aptitude cutoff" });
     }
 
     if (student.technicalOralStatus === "Completed" || student.technicalAssessmentStatus === "Completed") {

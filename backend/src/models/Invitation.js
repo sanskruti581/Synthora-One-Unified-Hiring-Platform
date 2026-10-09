@@ -59,6 +59,13 @@ const invitationSchema = new mongoose.Schema(
     },
     technicalAssessmentEmailSent: { type: Boolean, default: false },
     technicalAssessmentEmailError: String,
+    aptitudeClearedEmailStatus: {
+      type: String,
+      enum: ["sent", "failed", "smtp_not_configured"],
+      default: "smtp_not_configured",
+    },
+    aptitudeClearedEmailSent: { type: Boolean, default: false },
+    aptitudeClearedEmailError: String,
     result: {
       type: String,
       enum: ["Pending", "Qualified", "Rejected"],

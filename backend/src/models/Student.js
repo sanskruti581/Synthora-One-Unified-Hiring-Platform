@@ -48,6 +48,13 @@ const studentSchema = new mongoose.Schema(
     },
     technicalAssessmentEmailSent: { type: Boolean, default: false },
     technicalAssessmentEmailError: String,
+    aptitudeClearedEmailStatus: {
+      type: String,
+      enum: ["sent", "failed", "smtp_not_configured"],
+      default: "smtp_not_configured",
+    },
+    aptitudeClearedEmailSent: { type: Boolean, default: false },
+    aptitudeClearedEmailError: String,
     technicalOralInterview: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "TechnicalOralInterview",

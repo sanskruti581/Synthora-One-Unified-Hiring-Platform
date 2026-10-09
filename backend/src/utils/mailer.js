@@ -117,6 +117,7 @@ export async function sendTechnicalAssessmentInvitationEmail({
   accessStartsAt,
   accessExpiresAt,
   assessmentLink,
+  aptitudeScore,
 }) {
   if (!hasSmtpConfig()) {
     return { status: "smtp_not_configured" };
@@ -133,24 +134,27 @@ export async function sendTechnicalAssessmentInvitationEmail({
   try {
     const startsAt = new Date(accessStartsAt).toLocaleString();
     const expiresAt = new Date(accessExpiresAt).toLocaleString();
+    const scoreText = typeof aptitudeScore === "number" ? ` with a score of ${aptitudeScore}/100` : "";
+
     const text = [
       `Dear ${studentName || "Student"},`,
       "",
-      `You have been shortlisted by ${companyName} for the Technical Assessment.`,
+      `Congratulations! You have successfully cleared the Aptitude Assessment round for ${companyName}${scoreText}.`,
+      "",
+      `You are invited to participate in the Technical Oral Round (AI Viva).`,
       "",
       `Company: ${companyName}`,
       `Job Role: ${jobRole}`,
       `Hiring Drive: ${driveName}`,
-      "Round: Technical Assessment",
+      "Round: Technical Oral Round (AI Viva)",
       `Available From: ${startsAt}`,
       `Available Until: ${expiresAt}`,
+      "Duration: 15 minutes",
       "",
-      "You have 4 hours from activation to access the Technical Assessment.",
-      "",
-      "Assessment Link:",
+      "Please open your unique invitation link below to begin:",
       assessmentLink,
       "",
-      "Please sign in with your existing Synthora student credentials before starting.",
+      "This invitation is personal. Do not share this link.",
       "",
       "Regards,",
       "Synthora Recruitment Team",
@@ -160,7 +164,7 @@ export async function sendTechnicalAssessmentInvitationEmail({
       from,
       replyTo,
       to,
-      subject: `Shortlisted for Technical Assessment - ${companyName}`,
+      subject: `Invitation for Technical Oral Round (AI Viva) - ${companyName}`,
       text,
       headers: {
         "X-Auto-Response-Suppress": "OOF, AutoReply",
@@ -168,26 +172,98 @@ export async function sendTechnicalAssessmentInvitationEmail({
       html: `
       <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
         <p>Dear ${studentName || "Student"},</p>
-        <p>You have been shortlisted by <strong>${companyName}</strong> for the Technical Assessment.</p>
+        <p>Congratulations! You have successfully cleared the Aptitude Assessment round for <strong>${companyName}</strong>${scoreText ? ` ${scoreText}` : ""}.</p>
+        <p>You have qualified for the next round and are invited to take the <strong>Technical Oral Round (AI Viva)</strong>.</p>
         <p><strong>Company</strong><br/>${companyName}</p>
         <p><strong>Job Role</strong><br/>${jobRole}</p>
         <p><strong>Hiring Drive</strong><br/>${driveName}</p>
-        <p><strong>Round</strong><br/>Technical Assessment</p>
+        <p><strong>Round</strong><br/>Technical Oral Round (AI Viva)</p>
         <p><strong>Available From</strong><br/>${startsAt}</p>
         <p><strong>Available Until</strong><br/>${expiresAt}</p>
-        <p>You have 4 hours from activation to access and complete the Technical Assessment.</p>
-        <p><a href="${assessmentLink}" style="display:inline-block;background:#0284c7;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:700">Start Technical Assessment</a></p>
+        <p><strong>Duration</strong><br/>15 minutes</p>
+        <p>Please use your unique invitation link below to begin.</p>
+        <p><a href="${assessmentLink}" style="display:inline-block;background:#0284c7;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:700">Start Technical Oral Round</a></p>
         <p>If the button does not work, open this link:<br/><a href="${assessmentLink}">${assessmentLink}</a></p>
-        <p>Please sign in with your existing Synthora student credentials before starting.</p>
+        <p>This invitation is personal.<br/>Do not share this link.</p>
         <p>Regards<br/>Synthora Recruitment Team</p>
       </div>
     `,
     });
 
-    console.log(`Technical assessment email sent to ${to} via ${host}:${port} (${secure ? "SSL" : "TLS"})`, { messageId: info.messageId });
+    console.log(`Technical oral invitation email sent to ${to} via ${host}:${port} (${secure ? "SSL" : "TLS"})`, { messageId: info.messageId });
     return { status: "sent" };
   } catch (error) {
     console.error(`Failed to send technical assessment email to ${to}:`, error?.message || error);
+    throw error;
+  }
+}
+
+export async function sendAptitudeClearedEmail({
+  to,
+  studentName,
+  companyName,
+  driveName,
+  jobRole,
+  score,
+}) {
+  if (!hasSmtpConfig()) {
+    return { status: "smtp_not_configured" };
+  }
+
+  const { host, port, secure, auth, from, replyTo } = sanitizeSmtpConfig();
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth,
+  });
+
+  try {
+    const text = [
+      `Dear ${studentName || "Student"},`,
+      "",
+      `Congratulations! You have successfully cleared the Aptitude Assessment for ${companyName}${typeof score === "number" ? ` with a score of ${score}/100` : ""}.`,
+      "",
+      `Company: ${companyName}`,
+      `Job Role: ${jobRole}`,
+      `Hiring Drive: ${driveName}`,
+      "Round: Aptitude Assessment",
+      "Status: Cutoff Cleared",
+      "",
+      "Our recruitment team will review your application and communicate the next steps to your registered email address.",
+      "",
+      "Regards,",
+      "Synthora Recruitment Team",
+    ].join("\n");
+
+    const info = await transporter.sendMail({
+      from,
+      replyTo,
+      to,
+      subject: `Aptitude Assessment Cleared - ${companyName}`,
+      text,
+      headers: {
+        "X-Auto-Response-Suppress": "OOF, AutoReply",
+      },
+      html: `
+      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
+        <p>Dear ${studentName || "Student"},</p>
+        <p>Congratulations! You have successfully cleared the Aptitude Assessment for <strong>${companyName}</strong>${typeof score === "number" ? ` with a score of <strong>${score}/100</strong>` : ""}.</p>
+        <p><strong>Company</strong><br/>${companyName}</p>
+        <p><strong>Job Role</strong><br/>${jobRole}</p>
+        <p><strong>Hiring Drive</strong><br/>${driveName}</p>
+        <p><strong>Round</strong><br/>Aptitude Assessment</p>
+        <p><strong>Status</strong><br/>Cutoff Cleared</p>
+        <p>Our recruitment team will review your application and communicate the next steps to your registered email address.</p>
+        <p>Regards<br/>Synthora Recruitment Team</p>
+      </div>
+    `,
+    });
+
+    console.log(`Aptitude cleared email sent to ${to} via ${host}:${port} (${secure ? "SSL" : "TLS"})`, { messageId: info.messageId });
+    return { status: "sent" };
+  } catch (error) {
+    console.error(`Failed to send aptitude cleared email to ${to}:`, error?.message || error);
     throw error;
   }
 }
