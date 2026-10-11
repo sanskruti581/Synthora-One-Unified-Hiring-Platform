@@ -35,7 +35,6 @@ Then run:
 
 ```powershell
 cd backend
-npm install
 npm start
 ```
 
@@ -57,7 +56,6 @@ Open a new terminal and run:
 
 ```powershell
 cd C:\Users\DELL\Desktop\Final_year_project\synthora_code\Synthora-One-Unified-Hiring-Platform
-npm install
 npm run dev
 ```
 

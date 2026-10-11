@@ -166,7 +166,7 @@ export default function CodingAssessment() {
       setCompletionResult({
         codingScore: response.data.codingScore,
         maxCodingScore: response.data.maxCodingScore,
-        nextRound,
+        nextRound: nextRound ?? undefined,
         isQualified,
       });
       setMessage(`Submission successful! Score: ${response.data.codingScore}/${response.data.maxCodingScore}.`);
