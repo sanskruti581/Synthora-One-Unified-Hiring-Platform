@@ -36,6 +36,7 @@ export type SubmitCodeResponse = {
   nextRound: string | null;
   overallScore: number | null;
   result: string;
+  isQualified?: boolean;
   completedAt?: string;
 };
 
