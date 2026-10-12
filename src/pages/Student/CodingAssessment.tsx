@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { AlertTriangle, Camera, CheckCircle2, Clock3, Code2, Maximize2, Play, Send, ShieldCheck, XCircle } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import ThemeToggle from "../../components/ThemeToggle";
@@ -17,6 +17,8 @@ import logo from "../../../images/logo.png";
 export default function CodingAssessment() {
   const { driveId = "" } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const fromAptitude = Boolean((location.state as { fromAptitude?: boolean } | null)?.fromAptitude);
 
   // Data States
   const [assessmentData, setAssessmentData] = useState<CodingAssessmentData | null>(null);
@@ -257,13 +259,33 @@ export default function CodingAssessment() {
     };
   }, [handleProctorViolation, hasStartedExam, isProctorArmed, proctorReady]);
 
-  // Video streaming sync
-  useEffect(() => {
-    if (videoRef.current && cameraStream && videoRef.current.srcObject !== cameraStream) {
-      videoRef.current.srcObject = cameraStream;
-      videoRef.current.play().catch(() => undefined);
+  // Callback ref to guarantee video element binds to stream immediately when mounted in DOM
+  const setVideoRef = useCallback((el: HTMLVideoElement | null) => {
+    videoRef.current = el;
+    if (el && cameraStream) {
+      if (el.srcObject !== cameraStream) {
+        el.srcObject = cameraStream;
+      }
+      el.play().catch(() => undefined);
     }
   }, [cameraStream]);
+
+  // Video streaming sync
+  useEffect(() => {
+    if (videoRef.current && cameraStream) {
+      if (videoRef.current.srcObject !== cameraStream) {
+        videoRef.current.srcObject = cameraStream;
+      }
+      videoRef.current.play().catch(() => undefined);
+    }
+  }, [cameraStream, hasStartedExam]);
+
+  // If transitioned continuously from Aptitude, auto-start camera & assessment
+  useEffect(() => {
+    if (!loading && assessmentData && fromAptitude && !hasStartedExam && !isSecuringExam) {
+      void handleStartExam();
+    }
+  }, [loading, assessmentData, fromAptitude, hasStartedExam, isSecuringExam]);
 
   // Clean up stream on unmount
   useEffect(() => {
@@ -326,16 +348,33 @@ export default function CodingAssessment() {
     try {
       if (navigator.mediaDevices?.getUserMedia) {
         try {
-          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 640 }, height: { ideal: 480 } },
+            audio: true,
+          });
           setCameraStream(stream);
           setIsMicReady(true);
           setIsCameraReady(true);
-        } catch {
-          if (!isDemoMode) {
+          setHasPermissionError(false);
+        } catch (err: unknown) {
+          const mediaErr = err as { name?: string; message?: string };
+          console.warn("Camera/mic access error:", mediaErr);
+          if (mediaErr?.name === "NotAllowedError" || mediaErr?.name === "PermissionDeniedError") {
+            setMessage("Camera and microphone access was denied. Please allow permissions in your browser settings to proceed.");
+          } else if (mediaErr?.name === "NotFoundError" || mediaErr?.name === "DevicesNotFoundError") {
+            setMessage("No camera or microphone device found. Please connect a working webcam.");
+          } else if (mediaErr?.name === "NotReadableError" || mediaErr?.name === "TrackStartError") {
+            setMessage("Camera is currently in use by another tab or app. Please close other applications using your webcam.");
+          } else {
             setMessage("Camera and microphone access are required before the assessment can begin.");
+          }
+          setHasPermissionError(true);
+          setIsCameraReady(false);
+          setIsMicReady(false);
+          setIsSecuringExam(false);
+          if (!isDemoMode) {
             return;
           }
-          setMessage("Camera access was not granted, so the assessment will continue in demo mode.");
         }
       }
 
@@ -343,7 +382,7 @@ export default function CodingAssessment() {
         try {
           await document.documentElement.requestFullscreen();
         } catch {
-          setMessage("Fullscreen mode is recommended so the proctoring checks can run properly.");
+          // Fullscreen can fail if not direct user gesture in some browsers; continues gracefully
         }
       }
       setIsFullscreen(true);
@@ -354,14 +393,9 @@ export default function CodingAssessment() {
         setIsCameraReady(Boolean(stream));
       }
     } catch (error) {
-      const activeStream = stream as MediaStream | null;
-      activeStream?.getTracks?.().forEach((track: MediaStreamTrack) => track.stop());
-      setCameraStream(null);
-      setIsMicReady(false);
-      setIsCameraReady(false);
-      
+      console.error("Failed to secure exam:", error);
       setHasPermissionError(true);
-      setMessage("Microphone and camera access are required before the assessment can begin.");
+      setMessage("Camera and microphone access are required before the assessment can begin.");
     } finally {
       setIsSecuringExam(false);
     }
@@ -491,8 +525,6 @@ export default function CodingAssessment() {
 
   return (
     <div className="h-screen flex flex-col bg-slate-50 dark:bg-slate-950 overflow-hidden font-inter text-slate-900 dark:text-white">
-      {/* Hidden video element for face detection processing */}
-      <video ref={videoRef} className="hidden" autoPlay playsInline muted />
 
       {/* Header */}
       <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-white/10 flex items-center justify-between px-6 shrink-0 shadow-sm z-10">
@@ -536,8 +568,44 @@ export default function CodingAssessment() {
 
       {/* Main Content */}
       <main className="flex-1 flex overflow-hidden">
-        {/* Left Panel - Questions */}
+        {/* Left Panel - Questions & Live Camera */}
         <div className="w-1/3 min-w-[350px] max-w-lg bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-white/10 flex flex-col z-0">
+          {/* Live Camera Preview Widget */}
+          <div className="p-4 border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-950/50">
+            <div className="relative overflow-hidden rounded-xl border border-emerald-300 dark:border-emerald-500/30 bg-slate-950 aspect-video shadow-sm">
+              <video
+                ref={setVideoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-cover"
+              />
+              {cameraStream ? (
+                <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between px-2.5 py-1 rounded-lg bg-slate-950/80 backdrop-blur-sm text-[11px] font-bold text-white">
+                  <span className="flex items-center gap-1.5 text-emerald-400">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>Camera Monitoring Active</span>
+                  </span>
+                  <span className="text-slate-300">{faceStatus?.isFacePresent ? "Face Verified" : "Monitoring"}</span>
+                </div>
+              ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-3 text-center bg-slate-900 text-slate-300 text-xs">
+                  <Camera className="w-6 h-6 mb-1 text-slate-400" />
+                  <span>{hasPermissionError ? "Camera Access Denied" : "Camera initializing..."}</span>
+                  {hasPermissionError && (
+                    <button
+                      type="button"
+                      onClick={() => void handleStartExam()}
+                      className="mt-2 px-3 py-1 bg-sky-500 text-slate-950 text-[11px] font-bold rounded-lg hover:bg-sky-400"
+                    >
+                      Retry Camera
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="flex overflow-x-auto border-b border-slate-200 dark:border-white/10 shrink-0 bg-slate-50 dark:bg-slate-950/50">
             {questions.map((q, idx) => (
               <button 
@@ -718,8 +786,10 @@ export default function CodingAssessment() {
             <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-5">
               <CheckCircle2 className="w-9 h-9" />
             </div>
-            <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-sky-600 dark:text-sky-400">Coding Assessment Completed</p>
-            <h2 className="text-2xl font-black mt-2">Your solutions have been evaluated</h2>
+            <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-sky-600 dark:text-sky-400">
+              Assessment Completed
+            </p>
+            <h2 className="text-2xl font-black mt-2">Assessment Completed Successfully</h2>
             
             <div className="mt-5 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4 text-left">
               <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
@@ -727,37 +797,14 @@ export default function CodingAssessment() {
               </p>
               <p className="mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300">
                 Status: <span className={completionResult.isQualified ? "font-black text-emerald-600 dark:text-emerald-400" : "font-black text-rose-600 dark:text-rose-400"}>
-                  {completionResult.isQualified ? "Passed" : "Not Cleared"}
+                  {completionResult.isQualified ? "Submitted" : "Completed"}
                 </span>
               </p>
             </div>
 
-            <p className="mt-4 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-              {completionResult.isQualified
-                ? completionResult.nextRound === "Technical Oral"
-                  ? "Congratulations! You have cleared the Coding Round and qualified for the Technical Round (AI Viva). Click below to start your oral interview."
-                  : "Congratulations! You have completed the coding round."
-                : "You did not achieve the required score on the coding round. Your responses have been recorded."}
+            <p className="mt-5 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+              Thank you for completing the Aptitude Assessment and Coding Round. Your responses have been submitted successfully. Please check your registered email for updates regarding the next stage of the selection process.
             </p>
-
-            <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
-              {completionResult.isQualified && completionResult.nextRound === "Technical Oral" ? (
-                <button
-                  type="button"
-                  onClick={() => navigate(`/assessment/${driveId}/oral`)}
-                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-6 text-sm font-extrabold text-slate-950 transition hover:bg-emerald-400 shadow-lg shadow-emerald-500/20"
-                >
-                  Start Technical Round (AI Viva)
-                </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => navigate("/student/dashboard")}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-sky-500 px-6 text-sm font-extrabold text-slate-950 transition hover:bg-sky-400 shadow-lg shadow-sky-500/20"
-              >
-                Go to Dashboard
-              </button>
-            </div>
           </div>
         </div>
       )}

@@ -35,7 +35,7 @@ export function getTechnicalAssessmentState(student, invitation) {
   return "Active";
 }
 
-export async function promoteStudentToTechnicalAssessment({ student, drive, company, invitation, forceResendEmail = false }) {
+export async function promoteStudentToTechnicalAssessment({ student, drive, company, invitation, forceResendEmail = false, codingScore }) {
   if (!student || !drive) return null;
 
   let comp = company;
@@ -104,6 +104,7 @@ export async function promoteStudentToTechnicalAssessment({ student, drive, comp
         accessExpiresAt: expiresAt,
         assessmentLink,
         aptitudeScore,
+        codingScore: codingScore ?? student.codingScore,
       });
 
       student.technicalAssessmentEmailStatus = mailResult.status;

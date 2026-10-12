@@ -118,6 +118,7 @@ export async function sendTechnicalAssessmentInvitationEmail({
   accessExpiresAt,
   assessmentLink,
   aptitudeScore,
+  codingScore,
 }) {
   if (!hasSmtpConfig()) {
     return { status: "smtp_not_configured" };
@@ -134,12 +135,23 @@ export async function sendTechnicalAssessmentInvitationEmail({
   try {
     const startsAt = new Date(accessStartsAt).toLocaleString();
     const expiresAt = new Date(accessExpiresAt).toLocaleString();
-    const scoreText = typeof aptitudeScore === "number" ? ` with a score of ${aptitudeScore}/100` : "";
+    const hasAptitude = typeof aptitudeScore === "number";
+    const hasCoding = typeof codingScore === "number";
+    let scoreSummary = "";
+    if (hasAptitude && hasCoding) {
+      scoreSummary = ` (Aptitude Score: ${aptitudeScore}/100, Coding Score: ${codingScore})`;
+    } else if (hasAptitude) {
+      scoreSummary = ` (Aptitude Score: ${aptitudeScore}/100)`;
+    } else if (hasCoding) {
+      scoreSummary = ` (Coding Score: ${codingScore})`;
+    }
+
+    const roundText = hasCoding ? "Aptitude and Coding Assessment rounds" : "Aptitude Assessment round";
 
     const text = [
       `Dear ${studentName || "Student"},`,
       "",
-      `Congratulations! You have successfully cleared the Aptitude Assessment round for ${companyName}${scoreText}.`,
+      `Congratulations! You have successfully cleared the ${roundText} for ${companyName}${scoreSummary}.`,
       "",
       `You are invited to participate in the Technical Oral Round (AI Viva).`,
       "",
@@ -172,7 +184,7 @@ export async function sendTechnicalAssessmentInvitationEmail({
       html: `
       <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
         <p>Dear ${studentName || "Student"},</p>
-        <p>Congratulations! You have successfully cleared the Aptitude Assessment round for <strong>${companyName}</strong>${scoreText ? ` ${scoreText}` : ""}.</p>
+        <p>Congratulations! You have successfully cleared the <strong>${roundText}</strong> for <strong>${companyName}</strong>${scoreSummary ? `${scoreSummary}` : ""}.</p>
         <p>You have qualified for the next round and are invited to take the <strong>Technical Oral Round (AI Viva)</strong>.</p>
         <p><strong>Company</strong><br/>${companyName}</p>
         <p><strong>Job Role</strong><br/>${jobRole}</p>

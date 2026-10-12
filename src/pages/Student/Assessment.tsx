@@ -127,6 +127,13 @@ export default function Assessment() {
       const response = await submitAssessment(score, answers);
       const isQualified = Boolean(response.data.isAptitudeQualified || response.data.result === "Qualified");
       const nextRound = response.data.nextRound;
+
+      // Automatically transition to Coding Round without requiring another button click
+      if (isQualified && nextRound === "Coding") {
+        navigate(`/coding/${driveId}`, { state: { fromAptitude: true } });
+        return;
+      }
+
       setCompletionResult({
         score: response.data.score ?? score,
         isAptitudeQualified: isQualified,
@@ -514,11 +521,10 @@ export default function Assessment() {
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/10">
           {message ? (
-            <p className={`mb-4 rounded-xl px-4 py-3 text-sm font-bold ${
-              proctorViolation
+            <p className={`mb-4 rounded-xl px-4 py-3 text-sm font-bold ${proctorViolation
                 ? "bg-rose-50 text-rose-700 dark:bg-rose-400/10 dark:text-rose-200"
                 : "bg-sky-50 text-sky-700 dark:bg-sky-400/10 dark:text-sky-200"
-            }`}>
+              }`}>
               {message}
             </p>
           ) : null}
@@ -623,11 +629,10 @@ export default function Assessment() {
                         key={option}
                         type="button"
                         onClick={() => setAnswers((current) => ({ ...current, [currentQuestion.id]: option }))}
-                        className={`flex min-h-12 items-center justify-between rounded-xl border px-4 text-left text-sm font-bold transition ${
-                          selected
+                        className={`flex min-h-12 items-center justify-between rounded-xl border px-4 text-left text-sm font-bold transition ${selected
                             ? "border-sky-400 bg-sky-50 text-sky-700 dark:bg-sky-400/10 dark:text-sky-200"
                             : "border-slate-200 bg-slate-50 text-slate-700 hover:border-sky-300 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
-                        }`}
+                          }`}
                       >
                         {option}
                         {selected ? <CheckCircle2 className="h-5 w-5" /> : null}
@@ -722,39 +727,9 @@ export default function Assessment() {
             </div>
             <p className="mt-4 text-sm leading-6 text-slate-300">
               {completionResult.isAptitudeQualified
-                ? completionResult.nextRound === "Coding"
-                  ? "Congratulations! You have qualified for the Coding Round. Click below to begin your coding assessment."
-                  : completionResult.nextRound === "Technical Oral"
-                    ? "Congratulations! You have qualified for the Technical Round (AI Viva). Click below to begin."
-                    : "Congratulations! You have cleared the Aptitude cutoff."
-                : "You did not meet the required cutoff for this assessment. Best wishes for future opportunities."}
+                ? "Your responses have been submitted successfully. Please check your registered email for updates regarding the next stage of the selection process."
+                : "Your responses have been submitted. You did not meet the required cutoff for this assessment. Best wishes for future opportunities."}
             </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-              {completionResult.isAptitudeQualified && completionResult.nextRound === "Coding" ? (
-                <button
-                  type="button"
-                  onClick={() => navigate(`/coding/${driveId}`)}
-                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-6 text-sm font-extrabold text-slate-950 transition hover:bg-emerald-400 shadow-lg shadow-emerald-500/20"
-                >
-                  Proceed to Coding Round
-                </button>
-              ) : completionResult.isAptitudeQualified && completionResult.nextRound === "Technical Oral" ? (
-                <button
-                  type="button"
-                  onClick={() => navigate(`/assessment/${driveId}/oral`)}
-                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-6 text-sm font-extrabold text-slate-950 transition hover:bg-emerald-400 shadow-lg shadow-emerald-500/20"
-                >
-                  Proceed to Technical Round
-                </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => navigate("/student/dashboard")}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-sky-500 px-6 text-sm font-extrabold text-slate-950 transition hover:bg-sky-400 shadow-lg shadow-sky-500/20"
-              >
-                Go to Dashboard
-              </button>
-            </div>
           </div>
         </div>
       ) : null}

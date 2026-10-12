@@ -177,6 +177,10 @@ export default function TechnicalOralRound() {
   const isSubmittingRef = useRef(false);
   const violationCountRef = useRef(0);
   const currentQuestionIndexRef = useRef(0);
+  const committedTranscriptRef = useRef("");
+  const latestFullTranscriptRef = useRef("");
+  const isListeningRef = useRef(false);
+  const isExplicitlyStoppedRef = useRef(false);
 
   currentQuestionIndexRef.current = currentQuestionIndex;
 
@@ -311,34 +315,66 @@ export default function TechnicalOralRound() {
       recognition.lang = "en-US";
 
       recognition.onresult = (event: SpeechRecognitionEventLike) => {
-        let finalTrans = "";
+        let sessionFinal = "";
         let currentInterim = "";
 
+        // Collect finalized phrases and interim phrases from the current recognition session
         for (let i = 0; i < event.results.length; i++) {
           const item = event.results[i];
-          if (item.isFinal) {
-            finalTrans += `${item[0].transcript} `;
-          } else {
-            currentInterim += item[0].transcript;
+          if (item && item[0]) {
+            if (item.isFinal) {
+              sessionFinal += `${item[0].transcript.trim()} `;
+            } else {
+              currentInterim += item[0].transcript;
+            }
           }
         }
 
-        if (finalTrans) {
-          setSpokenTranscript((prev) => `${prev} ${finalTrans}`.trim());
-        }
-        setInterimText(currentInterim);
+        // Combine previously committed transcript with current session final phrases
+        const prefix = committedTranscriptRef.current ? `${committedTranscriptRef.current} ` : "";
+        const combined = `${prefix}${sessionFinal}`.trim();
+
+        latestFullTranscriptRef.current = combined;
+        setSpokenTranscript(combined);
+        setInterimText(currentInterim.trim());
       };
 
       recognition.onerror = (event: { error: string }) => {
         console.warn("Speech recognition error:", event.error);
+        if (event.error === "no-speech") {
+          // Natural pause in candidate speech; do not abort listening session
+          return;
+        }
+        if (event.error === "aborted") {
+          // Expected when stopping or restarting recognition
+          return;
+        }
         if (event.error === "not-allowed" || event.error === "service-not-allowed") {
           setMicError("Microphone access is denied. Please grant permission in your browser.");
+          isExplicitlyStoppedRef.current = true;
+          isListeningRef.current = false;
+          setIsListening(false);
+          return;
         }
-        setIsListening(false);
+        setMicError(`Speech recognition notice: ${event.error}`);
       };
 
       recognition.onend = () => {
-        setIsListening(false);
+        // Automatically restart recognition if candidate did not explicitly stop or submit,
+        // preventing speech capture from prematurely stopping during normal pauses.
+        if (isListeningRef.current && !isExplicitlyStoppedRef.current && !isSubmittingRef.current) {
+          committedTranscriptRef.current = latestFullTranscriptRef.current;
+          try {
+            recognition.start();
+          } catch (err) {
+            console.warn("Speech recognition auto-restart skipped:", err);
+            setIsListening(false);
+            isListeningRef.current = false;
+          }
+        } else {
+          setIsListening(false);
+          isListeningRef.current = false;
+        }
       };
 
       recognitionRef.current = recognition;
@@ -347,6 +383,8 @@ export default function TechnicalOralRound() {
     }
 
     return () => {
+      isExplicitlyStoppedRef.current = true;
+      isListeningRef.current = false;
       try {
         recognitionRef.current?.stop();
       } catch {
@@ -360,20 +398,26 @@ export default function TechnicalOralRound() {
     if (!recognitionRef.current) return;
     setMicError(null);
 
-    if (isListening) {
+    if (isListeningRef.current) {
+      isExplicitlyStoppedRef.current = true;
+      isListeningRef.current = false;
+      setIsListening(false);
+      committedTranscriptRef.current = latestFullTranscriptRef.current;
       try {
         recognitionRef.current.stop();
       } catch {
         // ignore
       }
-      setIsListening(false);
     } else {
+      isExplicitlyStoppedRef.current = false;
+      isListeningRef.current = true;
+      setIsListening(true);
       try {
         recognitionRef.current.start();
-        setIsListening(true);
       } catch (err: unknown) {
         console.warn("Failed to start speech recognition:", err);
         setIsListening(false);
+        isListeningRef.current = false;
       }
     }
   };
@@ -385,13 +429,15 @@ export default function TechnicalOralRound() {
     setIsEvaluating(true);
 
     // Stop listening & AI speech
-    if (recognitionRef.current && isListening) {
+    isExplicitlyStoppedRef.current = true;
+    isListeningRef.current = false;
+    setIsListening(false);
+    if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
       } catch {
         // ignore
       }
-      setIsListening(false);
     }
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
@@ -456,6 +502,8 @@ export default function TechnicalOralRound() {
         } : current);
         setCurrentQuestion(nextQuestion);
         setCurrentQuestionIndex(nextIndex);
+        committedTranscriptRef.current = "";
+        latestFullTranscriptRef.current = "";
         setSpokenTranscript("");
         setInterimText("");
         setTimeLeft(QUESTION_TIME_LIMIT);
@@ -477,6 +525,8 @@ export default function TechnicalOralRound() {
       } else if (data.nextQuestion) {
         setCurrentQuestion(data.nextQuestion);
         setCurrentQuestionIndex(data.currentQuestionIndex || currentQuestionIndexRef.current + 1);
+        committedTranscriptRef.current = "";
+        latestFullTranscriptRef.current = "";
         setSpokenTranscript("");
         setInterimText("");
         setTimeLeft(QUESTION_TIME_LIMIT);
@@ -841,6 +891,8 @@ export default function TechnicalOralRound() {
                 <button
                   type="button"
                   onClick={() => {
+                    committedTranscriptRef.current = "";
+                    latestFullTranscriptRef.current = "";
                     setSpokenTranscript("");
                     setInterimText("");
                   }}

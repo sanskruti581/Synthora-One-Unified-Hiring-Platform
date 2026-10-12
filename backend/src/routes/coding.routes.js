@@ -176,10 +176,15 @@ router.post("/submit", requireStudent, async (req, res) => {
       submission: submissionDetails
     });
 
-    // Check coding cutoff if configured
-    const isCodingQualified = !drive.codingCutoff || totalScore >= drive.codingCutoff;
+    // Check qualification criteria for BOTH Aptitude Assessment and Coding Round
+    const aptitudeScore = student.aptitudeScore ?? student.score;
+    const isAptitudeQualified = typeof aptitudeScore === "number"
+      ? (!drive.aptitudeCutoff || aptitudeScore >= Number(drive.aptitudeCutoff))
+      : true;
+    const isCodingQualified = !drive.codingCutoff || totalScore >= Number(drive.codingCutoff);
+    const isBothQualified = isAptitudeQualified && isCodingQualified;
 
-    if (!isCodingQualified) {
+    if (!isBothQualified) {
       student.result = "Rejected";
       student.assessmentStatus = "Completed";
       student.completedAt = new Date();
@@ -198,13 +203,14 @@ router.post("/submit", requireStudent, async (req, res) => {
       }
 
       return res.json({
-        message: "Coding assessment completed. Cutoff not cleared.",
+        message: "Assessment completed. Cutoff not cleared.",
         codingScore: totalScore,
         maxCodingScore: totalMaxScore,
         passedCount: totalPassed,
         totalCount: totalTestCases,
         nextRound: null,
         result: "Rejected",
+        isQualified: false,
         overallScore: student.overallScore,
         completedAt: student.completedAt.toISOString(),
       });
@@ -219,7 +225,13 @@ router.post("/submit", requireStudent, async (req, res) => {
       if (nextRound === "Technical Oral") {
         const company = await Company.findById(drive.company);
         const invitation = await Invitation.findOne({ student: student._id, drive: drive._id });
-        await promoteStudentToTechnicalAssessment({ student, drive, company, invitation });
+        await promoteStudentToTechnicalAssessment({
+          student,
+          drive,
+          company,
+          invitation,
+          codingScore: totalScore
+        });
       }
     } else {
       student.assessmentStatus = "Completed";
