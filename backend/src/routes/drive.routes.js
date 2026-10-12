@@ -403,6 +403,98 @@ router.post("/:driveId/technical-assessment/:studentId/invite", requireCompany, 
   }
 });
 
+const updateDriveScheduleHandler = async (req, res) => {
+  try {
+    const { examTime, examDate, durationMinutes, notifyStudents } = req.body;
+
+    if (!examTime && !examDate && durationMinutes === undefined) {
+      return res.status(400).json({ message: "Please provide an exam time, date, or duration to update." });
+    }
+
+    const drive = await HiringDrive.findOne({ _id: req.params.driveId, company: req.companyId });
+    if (!drive) {
+      return res.status(404).json({ message: "Hiring drive not found" });
+    }
+
+    if (examTime && typeof examTime === "string" && examTime.trim()) {
+      drive.examTime = examTime.trim();
+    }
+    if (examDate && typeof examDate === "string" && examDate.trim()) {
+      drive.examDate = examDate.trim();
+    }
+    if (durationMinutes !== undefined && !isNaN(Number(durationMinutes))) {
+      drive.durationMinutes = Math.max(1, Number(durationMinutes));
+    }
+
+    await drive.save();
+
+    // Recalculate schedule windows
+    const examStart = getExamStartDate(drive.examDate, drive.examTime);
+    const activationOpenAt = new Date(examStart.getTime() - 10 * 60 * 1000);
+    const expiresAt = new Date(examStart.getTime() + Number(drive.durationMinutes) * 60 * 1000);
+    const now = new Date();
+
+    const invitations = await Invitation.find({ drive: drive._id }).populate("student");
+    const company = await Company.findById(req.companyId);
+    const clientUrl = (process.env.CLIENT_URL || "http://localhost:5173").replace(/\/+$/, "");
+
+    let notifiedCount = 0;
+
+    for (const invitation of invitations) {
+      invitation.activationOpenAt = activationOpenAt;
+      invitation.expiresAt = expiresAt;
+
+      // Revive expired invitation if the new exam schedule extends into the future
+      if (invitation.invitationStatus === "Expired" && now < expiresAt) {
+        invitation.invitationStatus = invitation.usedAt ? "Activated" : "Pending";
+      }
+
+      if (notifyStudents && invitation.student?.email) {
+        try {
+          const mailResult = await sendStudentInvitationEmail({
+            to: invitation.student.email,
+            studentName: invitation.student.name,
+            companyName: company?.companyName || "Synthora",
+            driveName: drive.driveName,
+            jobRole: drive.jobRole,
+            examDate: drive.examDate,
+            examTime: drive.examTime,
+            durationMinutes: drive.durationMinutes,
+            activationLink: `${clientUrl}/invite/${invitation.token}`,
+          });
+
+          if (mailResult.status === "sent") {
+            notifiedCount++;
+            invitation.emailStatus = "sent";
+            invitation.emailSent = true;
+            invitation.deliveryStatus = "Delivered to SMTP";
+            invitation.sentAt = new Date();
+            invitation.sentTime = invitation.sentAt;
+          }
+        } catch (err) {
+          console.warn(`Failed to notify student ${invitation.student.email}:`, err.message);
+        }
+      }
+
+      await invitation.save();
+    }
+
+    return res.json({
+      message: "Exam schedule updated successfully",
+      drive: toPublicDrive(drive),
+      notifiedStudents: notifiedCount,
+      totalInvitations: invitations.length,
+    });
+  } catch (error) {
+    console.error("Failed to update drive schedule:", error);
+    return res.status(500).json({ message: error.message || "Failed to update exam schedule" });
+  }
+};
+
+router.patch("/:driveId/schedule", requireCompany, updateDriveScheduleHandler);
+router.put("/:driveId/schedule", requireCompany, updateDriveScheduleHandler);
+router.patch("/:driveId", requireCompany, updateDriveScheduleHandler);
+
 router.delete("/:driveId", requireCompany, async (req, res) => {
   const drive = await HiringDrive.findOneAndDelete({ _id: req.params.driveId, company: req.companyId });
 

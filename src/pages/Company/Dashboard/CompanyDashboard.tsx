@@ -1,12 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, CalendarClock, CheckCircle2, FileSpreadsheet, Send, Sparkles, Trash2, UsersRound } from "lucide-react";
+import { ArrowUpRight, CalendarClock, CheckCircle2, FileSpreadsheet, RefreshCw, Send, Sparkles, Trash2, UsersRound, X } from "lucide-react";
 import { motion } from "framer-motion";
 import DashboardLayout from "../../../layouts/DashboardLayout";
-import { deleteHiringDrive, getHiringDrives, type HiringDrive } from "../../../services/driveService";
+import { deleteHiringDrive, getHiringDrives, updateDriveSchedule, type HiringDrive } from "../../../services/driveService";
 
 export default function CompanyDashboard() {
   const [drives, setDrives] = useState<HiringDrive[]>([]);
+  const [message, setMessage] = useState("");
+
+  // Schedule Modification Modal States
+  const [activeDriveForSchedule, setActiveDriveForSchedule] = useState<HiringDrive | null>(null);
+  const [editExamDate, setEditExamDate] = useState("");
+  const [editExamTime, setEditExamTime] = useState("");
+  const [editDurationMinutes, setEditDurationMinutes] = useState("");
+  const [notifyStudents, setNotifyStudents] = useState(true);
+  const [isUpdatingSchedule, setIsUpdatingSchedule] = useState(false);
+  const [scheduleError, setScheduleError] = useState("");
 
   useEffect(() => {
     getHiringDrives()
@@ -17,6 +27,49 @@ export default function CompanyDashboard() {
   const handleDelete = async (driveId: string) => {
     await deleteHiringDrive(driveId);
     setDrives((current) => current.filter((drive) => drive._id !== driveId));
+  };
+
+  const handleOpenScheduleModal = (drive: HiringDrive) => {
+    setActiveDriveForSchedule(drive);
+    setEditExamDate(drive.examDate || "");
+    setEditExamTime(drive.examTime || "");
+    setEditDurationMinutes(String(drive.durationMinutes || 60));
+    setNotifyStudents(true);
+    setScheduleError("");
+  };
+
+  const handleUpdateSchedule = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!activeDriveForSchedule) return;
+    if (!editExamTime || !editExamDate) {
+      setScheduleError("Please specify both exam date and start time.");
+      return;
+    }
+
+    setIsUpdatingSchedule(true);
+    setScheduleError("");
+
+    try {
+      const res = await updateDriveSchedule(activeDriveForSchedule._id, {
+        examDate: editExamDate,
+        examTime: editExamTime,
+        durationMinutes: Number(editDurationMinutes) || activeDriveForSchedule.durationMinutes,
+        notifyStudents,
+      });
+
+      setDrives((current) =>
+        current.map((d) => (d._id === activeDriveForSchedule._id ? { ...d, ...res.data.drive } : d))
+      );
+      setMessage(`Exam schedule updated for ${activeDriveForSchedule.driveName} to ${editExamDate} at ${editExamTime}!`);
+      setActiveDriveForSchedule(null);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        "Failed to update exam schedule.";
+      setScheduleError(msg);
+    } finally {
+      setIsUpdatingSchedule(false);
+    }
   };
 
   const totalStudentsInvited = useMemo(
@@ -36,6 +89,12 @@ export default function CompanyDashboard() {
       title="Dashboard"
       subtitle="Track hiring drives, student invitations, assessment progress, and final shortlists from one command center."
     >
+      {message ? (
+        <div className="mb-6 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-bold text-sky-700">
+          {message}
+        </div>
+      ) : null}
+
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
         {stats.map((stat, index) => {
           const Icon = stat.icon;
@@ -81,13 +140,21 @@ export default function CompanyDashboard() {
                 </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-3">
                   <DriveFact label="Status" value={drive.status} />
-                  <DriveFact label="Exam Date" value={drive.examDate} />
+                  <DriveFact label="Exam Schedule" value={`${drive.examDate} at ${drive.examTime}`} />
                   <DriveFact label="Students Invited" value={String(drive.studentsInvited ?? 0)} />
                 </div>
                 <div className="mt-4 flex flex-wrap gap-3">
                   <Link to={`/company/drives/${drive._id}`} className="inline-flex h-10 items-center justify-center rounded-xl bg-synthora-blue px-4 text-sm font-bold text-white shadow-[0_12px_24px_rgba(37,99,235,.20)] transition hover:bg-synthora-blue-hover">
                     View Details
                   </Link>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenScheduleModal(drive)}
+                    className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-synthora-border bg-white px-3.5 text-sm font-bold text-synthora-text transition hover:bg-blue-50 hover:text-synthora-blue"
+                  >
+                    <CalendarClock className="h-4 w-4 text-synthora-blue" />
+                    Modify Time
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleDelete(drive._id)}
@@ -118,6 +185,114 @@ export default function CompanyDashboard() {
           </button>
         </section>
       </div>
+
+      {activeDriveForSchedule && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-md rounded-2xl border border-synthora-border bg-white p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-synthora-border">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-synthora-blue">
+                  <CalendarClock className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-synthora-text">Modify Exam Schedule</h3>
+                  <p className="text-xs text-synthora-muted">Update time for {activeDriveForSchedule.driveName}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveDriveForSchedule(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {scheduleError ? (
+              <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs font-bold text-rose-700">
+                {scheduleError}
+              </div>
+            ) : null}
+
+            <form onSubmit={handleUpdateSchedule} className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-extrabold uppercase text-synthora-muted mb-1.5">
+                  Exam Date
+                </label>
+                <input
+                  type="date"
+                  value={editExamDate}
+                  onChange={(e) => setEditExamDate(e.target.value)}
+                  required
+                  className="w-full h-11 rounded-xl border border-synthora-border bg-white px-3.5 text-sm font-bold text-synthora-text outline-none focus:border-synthora-blue focus:ring-2 focus:ring-synthora-blue/20"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-extrabold uppercase text-synthora-muted mb-1.5">
+                  Exam Start Time
+                </label>
+                <input
+                  type="time"
+                  value={editExamTime}
+                  onChange={(e) => setEditExamTime(e.target.value)}
+                  required
+                  className="w-full h-11 rounded-xl border border-synthora-border bg-white px-3.5 text-sm font-bold text-synthora-text outline-none focus:border-synthora-blue focus:ring-2 focus:ring-synthora-blue/20"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-extrabold uppercase text-synthora-muted mb-1.5">
+                  Duration (Minutes)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={editDurationMinutes}
+                  onChange={(e) => setEditDurationMinutes(e.target.value)}
+                  required
+                  className="w-full h-11 rounded-xl border border-synthora-border bg-white px-3.5 text-sm font-bold text-synthora-text outline-none focus:border-synthora-blue focus:ring-2 focus:ring-synthora-blue/20"
+                />
+              </div>
+
+              <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3.5">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={notifyStudents}
+                    onChange={(e) => setNotifyStudents(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-synthora-blue focus:ring-synthora-blue"
+                  />
+                  <div className="text-xs">
+                    <span className="font-bold text-synthora-text block">Send updated schedule email</span>
+                    <span className="text-synthora-muted">
+                      Notify invited candidates of the rescheduled exam time immediately.
+                    </span>
+                  </div>
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveDriveForSchedule(null)}
+                  className="h-11 rounded-xl border border-synthora-border px-4 text-xs font-bold text-synthora-muted hover:bg-slate-50 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingSchedule}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-synthora-blue px-5 text-xs font-bold text-white shadow-[0_12px_24px_rgba(37,99,235,.20)] hover:bg-synthora-blue-hover transition disabled:opacity-50"
+                >
+                  {isUpdatingSchedule ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CalendarClock className="h-4 w-4" />}
+                  {isUpdatingSchedule ? "Updating..." : "Save Exam Schedule"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 }

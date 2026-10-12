@@ -152,3 +152,17 @@ export async function downloadDriveFile(driveId: string, type: "jd" | "students-
   link.remove();
   window.URL.revokeObjectURL(url);
 }
+
+export type UpdateDriveSchedulePayload = {
+  examTime?: string;
+  examDate?: string;
+  durationMinutes?: number;
+  notifyStudents?: boolean;
+};
+
+export async function updateDriveSchedule(driveId: string, payload: UpdateDriveSchedulePayload) {
+  return api.patch<{ message: string; drive: HiringDrive; notifiedStudents?: number }>(
+    `/company/drives/${driveId}/schedule`,
+    payload
+  );
+}
