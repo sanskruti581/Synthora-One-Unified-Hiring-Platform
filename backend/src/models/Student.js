@@ -73,7 +73,6 @@ const studentSchema = new mongoose.Schema(
       completedAt: { type: Date },
       submission: { type: mongoose.Schema.Types.Mixed, default: {} },
     }],
-    aptitudeScore: { type: Number, default: null },
     aptitudeStartedAt: { type: Date },
     aptitudeExpiresAt: { type: Date },
     codingScore: { type: Number, default: null },

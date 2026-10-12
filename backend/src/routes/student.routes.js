@@ -240,7 +240,7 @@ router.get("/invite/:token", async (req, res) => {
       companyName: company.companyName,
       examDate: drive.examDate,
       examTime: drive.examTime,
-      durationMinutes: 15,
+      durationMinutes: drive.technicalOralDurationMinutes || 20,
       status: isTechCompleted ? "Completed" : isTechExpired ? "Closed" : canAccessTech ? "Ready to Begin" : "Window Not Open",
       roundName: "Technical Oral Round (AI Viva)",
       driveId: drive._id,
@@ -255,6 +255,44 @@ router.get("/invite/:token", async (req, res) => {
       expiresAt: techExpiresAt,
       currentRound: "Technical Oral",
       redirectUrl: `/assessment/${drive._id}/oral`,
+    });
+  }
+
+  const isCodingRound = invitation.currentRound === "Coding" || student.currentRound === "Coding";
+
+  if (isCodingRound) {
+    const codingStartsAt = invitation.codingAccessStartsAt || student.codingAccessStartsAt || now;
+    const codingExpiresAt = invitation.codingAccessExpiresAt || student.codingAccessExpiresAt || invitation.expiresAt;
+    const isCodingCompleted = student.codingStatus === "Completed" || (student.roundResults && student.roundResults.some(r => normalizeRoundName(r.roundName) === "Coding" && r.status === "Completed"));
+    const isCodingExpired = student.codingStatus === "Expired" || (codingExpiresAt && now > new Date(codingExpiresAt));
+    const canAccessCoding = !isCodingCompleted && !isCodingExpired && now >= new Date(codingStartsAt);
+
+    return res.json({
+      token: invitation.token,
+      invitationStatus: isCodingExpired ? "Expired" : "Activated",
+      alreadyActivated: true,
+      email: student.email,
+      studentName: student.name,
+      driveName: drive.driveName,
+      jobRole: drive.jobRole,
+      companyName: company.companyName,
+      examDate: drive.examDate,
+      examTime: drive.examTime,
+      durationMinutes: drive.codingDurationMinutes || 45,
+      status: isCodingCompleted ? "Completed" : isCodingExpired ? "Closed" : canAccessCoding ? "Ready to Begin" : "Window Not Open",
+      roundName: "Coding Round",
+      driveId: drive._id,
+      examStartAt: codingStartsAt,
+      examEndAt: codingExpiresAt,
+      loginWindowOpenAt: codingStartsAt,
+      canLogin: canAccessCoding,
+      canStartAssessment: canAccessCoding,
+      loginCountdownSeconds: 0,
+      examCountdownSeconds: 0,
+      activationOpenAt: codingStartsAt,
+      expiresAt: codingExpiresAt,
+      currentRound: "Coding",
+      redirectUrl: `/coding/${drive._id}`,
     });
   }
   const examStartAt = getExamStartDate(drive.examDate, drive.examTime);
@@ -356,6 +394,55 @@ router.post("/invite/:token/start", async (req, res) => {
       redirectUrl: `/assessment/${drive._id}/oral`,
       examStartAt: techStartsAt,
       loginWindowOpenAt: techStartsAt,
+    });
+  }
+
+  const isCodingRound = invitation.currentRound === "Coding" || student.currentRound === "Coding";
+
+  if (isCodingRound) {
+    const codingStartsAt = invitation.codingAccessStartsAt || student.codingAccessStartsAt || now;
+    const codingExpiresAt = invitation.codingAccessExpiresAt || student.codingAccessExpiresAt || invitation.expiresAt;
+    const isCodingCompleted = student.codingStatus === "Completed" || (student.roundResults && student.roundResults.some(r => normalizeRoundName(r.roundName) === "Coding" && r.status === "Completed"));
+    const isCodingExpired = student.codingStatus === "Expired" || (codingExpiresAt && now > new Date(codingExpiresAt));
+
+    if (isCodingCompleted) {
+      return res.status(400).json({ message: "Coding Round is already completed" });
+    }
+
+    if (isCodingExpired) {
+      student.codingStatus = "Expired";
+      invitation.codingStatus = "Expired";
+      await Promise.all([invitation.save(), student.save()]);
+      return res.status(403).json({ message: "The Coding Assessment access window has expired" });
+    }
+
+    if (now < new Date(codingStartsAt)) {
+      return res.status(403).json({ message: "The Coding Assessment access window is not open yet" });
+    }
+
+    student.isActive = true;
+    student.lastLogin = now;
+    student.currentRound = "Coding";
+    await student.save();
+
+    invitation.invitationStatus = "Activated";
+    invitation.currentRound = "Coding";
+    invitation.lastLogin = now;
+    await invitation.save();
+
+    const authToken = jwt.sign({ id: student._id, userType: "student" }, process.env.JWT_SECRET || "dev-secret", { expiresIn: "1d" });
+
+    return res.json({
+      message: "Coding Round started",
+      token: authToken,
+      driveId: drive._id,
+      studentName: student.name,
+      companyName: company.companyName,
+      driveName: drive.driveName,
+      currentRound: "Coding",
+      redirectUrl: `/coding/${drive._id}`,
+      examStartAt: codingStartsAt,
+      loginWindowOpenAt: codingStartsAt,
     });
   }
   const examStartAt = getExamStartDate(drive.examDate, drive.examTime);
@@ -765,6 +852,17 @@ router.post("/assessment/complete", requireStudent, async (req, res) => {
 
     if (nextRound === "Technical Oral") {
       await promoteStudentToTechnicalAssessment({ student, drive, company, invitation });
+    } else if (nextRound === "Coding") {
+      const codingDurationHours = drive.codingWindowDurationHours || 6;
+      student.codingStatus = "Active";
+      student.codingAccessStartsAt = completedAt;
+      student.codingAccessExpiresAt = new Date(completedAt.getTime() + codingDurationHours * 60 * 60 * 1000);
+      if (invitation) {
+        invitation.codingStatus = "Active";
+        invitation.codingAccessStartsAt = student.codingAccessStartsAt;
+        invitation.codingAccessExpiresAt = student.codingAccessExpiresAt;
+        invitation.expiresAt = student.codingAccessExpiresAt;
+      }
     }
 
     await student.save();

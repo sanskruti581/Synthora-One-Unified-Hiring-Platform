@@ -1,6 +1,50 @@
 import CodingQuestion from "../models/CodingQuestion.js";
 
 const questions = [
+  // ==========================================
+  // ACTIVE TESTING QUESTION: Addition of 2 Numbers
+  // ==========================================
+  {
+    title: "Addition of Two Numbers",
+    slug: "addition-of-two-numbers",
+    difficulty: "Easy",
+    description: "Given two integers a and b, calculate and return their sum (a + b).\n\nRead the two integers from standard input (each on a separate line) and output their sum to standard output.",
+    constraints: [
+      "-10^9 <= a, b <= 10^9"
+    ],
+    examples: [
+      {
+        input: "2\n3",
+        output: "5",
+        explanation: "2 + 3 = 5"
+      },
+      {
+        input: "10\n-4",
+        output: "6",
+        explanation: "10 + (-4) = 6"
+      }
+    ],
+    starterCode: {
+      javascript: `function addNumbers(a, b) {\n  // Write your code here\n  \n}\n\n// Read from stdin to handle inputs\nconst fs = require('fs');\nconst input = fs.readFileSync(0, 'utf-8').trim().split('\\n');\nif (input.length >= 2) {\n  const a = parseInt(input[0], 10);\n  const b = parseInt(input[1], 10);\n  console.log(addNumbers(a, b));\n}`,
+      python: `def add_numbers(a, b):\n    # Write your code here\n    pass\n\nif __name__ == "__main__":\n    import sys\n    input_data = sys.stdin.read().strip().split('\\n')\n    if len(input_data) >= 2:\n        a = int(input_data[0])\n        b = int(input_data[1])\n        print(add_numbers(a, b))`
+    },
+    testCases: [
+      { input: "2\n3", expectedOutput: "5", isHidden: false },
+      { input: "10\n-4", expectedOutput: "6", isHidden: false },
+      { input: "0\n0", expectedOutput: "0", isHidden: true },
+      { input: "100\n250", expectedOutput: "350", isHidden: true },
+      { input: "-15\n-35", expectedOutput: "-50", isHidden: true }
+    ],
+    marks: 10,
+    timeLimit: 2000,
+    memoryLimit: 256
+  }
+
+  /*
+  // ==========================================================
+  // COMMENTED OUT FOR TESTING (Uncomment when ready for production)
+  // ==========================================================
+  ,
   {
     title: "Two Sum",
     slug: "two-sum",
@@ -50,14 +94,14 @@ const questions = [
     ],
     examples: [
       {
-        input: '"A man, a plan, a canal: Panama"',
+        input: '\"A man, a plan, a canal: Panama\"',
         output: "true",
-        explanation: '"amanaplanacanalpanama" is a palindrome.'
+        explanation: '\"amanaplanacanalpanama\" is a palindrome.'
       },
       {
-        input: '"race a car"',
+        input: '\"race a car\"',
         output: "false",
-        explanation: '"raceacar" is not a palindrome.'
+        explanation: '\"raceacar\" is not a palindrome.'
       }
     ],
     starterCode: {
@@ -65,11 +109,11 @@ const questions = [
       python: `def is_palindrome(s):\n    # Write your code here\n    pass\n\nif __name__ == "__main__":\n    import sys, json\n    input_data = sys.stdin.read().strip()\n    if input_data:\n        s = json.loads(input_data)\n        print(str(is_palindrome(s)).lower())`
     },
     testCases: [
-      { input: '"A man, a plan, a canal: Panama"', expectedOutput: "true", isHidden: false },
-      { input: '"race a car"', expectedOutput: "false", isHidden: false },
-      { input: '" "', expectedOutput: "true", isHidden: true },
-      { input: '"0P"', expectedOutput: "false", isHidden: true },
-      { input: '"ab_a"', expectedOutput: "true", isHidden: true }
+      { input: '\"A man, a plan, a canal: Panama\"', expectedOutput: "true", isHidden: false },
+      { input: '\"race a car\"', expectedOutput: "false", isHidden: false },
+      { input: '\" \"', expectedOutput: "true", isHidden: true },
+      { input: '\"0P\"', expectedOutput: "false", isHidden: true },
+      { input: '\"ab_a\"', expectedOutput: "true", isHidden: true }
     ],
     marks: 10,
     timeLimit: 2000,
@@ -86,12 +130,12 @@ const questions = [
     examples: [
       {
         input: "3",
-        output: '["1","2","Fizz"]',
+        output: '[\"1\",\"2\",\"Fizz\"]',
         explanation: ""
       },
       {
         input: "5",
-        output: '["1","2","Fizz","4","Buzz"]',
+        output: '[\"1\",\"2\",\"Fizz\",\"4\",\"Buzz\"]',
         explanation: ""
       }
     ],
@@ -100,11 +144,11 @@ const questions = [
       python: `def fizz_buzz(n):\n    # Write your code here\n    pass\n\nif __name__ == "__main__":\n    import sys, json\n    input_data = sys.stdin.read().strip()\n    if input_data:\n        n = int(input_data)\n        print(json.dumps(fizz_buzz(n)))`
     },
     testCases: [
-      { input: "3", expectedOutput: '["1","2","Fizz"]', isHidden: false },
-      { input: "5", expectedOutput: '["1","2","Fizz","4","Buzz"]', isHidden: false },
-      { input: "15", expectedOutput: '["1","2","Fizz","4","Buzz","Fizz","7","8","Fizz","Buzz","11","Fizz","13","14","FizzBuzz"]', isHidden: true },
-      { input: "1", expectedOutput: '["1"]', isHidden: true },
-      { input: "10", expectedOutput: '["1","2","Fizz","4","Buzz","Fizz","7","8","Fizz","Buzz"]', isHidden: true }
+      { input: "3", expectedOutput: '[\"1\",\"2\",\"Fizz\"]', isHidden: false },
+      { input: "5", expectedOutput: '[\"1\",\"2\",\"Fizz\",\"4\",\"Buzz\"]', isHidden: false },
+      { input: "15", expectedOutput: '[\"1\",\"2\",\"Fizz\",\"4\",\"Buzz\",\"Fizz\",\"7\",\"8\",\"Fizz\",\"Buzz\",\"11\",\"Fizz\",\"13\",\"14\",\"FizzBuzz\"]', isHidden: true },
+      { input: "1", expectedOutput: '[\"1\"]', isHidden: true },
+      { input: "10", expectedOutput: '[\"1\",\"2\",\"Fizz\",\"4\",\"Buzz\",\"Fizz\",\"7\",\"8\",\"Fizz\",\"Buzz\"]', isHidden: true }
     ],
     marks: 15,
     timeLimit: 2000,
@@ -157,12 +201,12 @@ const questions = [
     ],
     examples: [
       {
-        input: '"()"',
+        input: '\"()\"',
         output: "true",
         explanation: "Valid because it's a simple balanced pair."
       },
       {
-        input: '"()[]{}"',
+        input: '\"()[]{}\"',
         output: "true",
         explanation: "Valid because all pairs are matched and balanced."
       }
@@ -172,21 +216,25 @@ const questions = [
       python: `def is_valid(s):\n    # Write your code here\n    pass\n\nif __name__ == "__main__":\n    import sys, json\n    input_data = sys.stdin.read().strip()\n    if input_data:\n        s = json.loads(input_data)\n        print(str(is_valid(s)).lower())`
     },
     testCases: [
-      { input: '"()"', expectedOutput: "true", isHidden: false },
-      { input: '"()[]{}"', expectedOutput: "true", isHidden: false },
-      { input: '"(]"', expectedOutput: "false", isHidden: true },
-      { input: '"([)]"', expectedOutput: "false", isHidden: true },
-      { input: '"{[]}"', expectedOutput: "true", isHidden: true },
-      { input: '"]"', expectedOutput: "false", isHidden: true }
+      { input: '\"()\"', expectedOutput: "true", isHidden: false },
+      { input: '\"()[]{}\"', expectedOutput: "true", isHidden: false },
+      { input: '\"(]\"', expectedOutput: "false", isHidden: true },
+      { input: '\"([)]\"', expectedOutput: "false", isHidden: true },
+      { input: '\"{[]}\"', expectedOutput: "true", isHidden: true },
+      { input: '\"]\"', expectedOutput: "false", isHidden: true }
     ],
     marks: 20,
     timeLimit: 2000,
     memoryLimit: 256
   }
+  */
 ];
 
 export async function seedCodingQuestions() {
   try {
+    // Clear previously seeded questions so that only the active testing question is loaded
+    await CodingQuestion.deleteMany({});
+
     for (const q of questions) {
       await CodingQuestion.findOneAndUpdate(
         { slug: q.slug },
@@ -194,7 +242,7 @@ export async function seedCodingQuestions() {
         { upsert: true, new: true }
       );
     }
-    console.log("✅ Seeded coding questions successfully");
+    console.log(`✅ Seeded ${questions.length} coding question(s) successfully (testing mode)`);
   } catch (err) {
     console.error("❌ Error seeding coding questions:", err);
   }

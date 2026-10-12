@@ -40,11 +40,12 @@ function buildStats(students) {
 
   const loggedInStudents = students.filter((student) => student.assessmentStatus === "Logged In").length;
   const startedStudents = students.filter((student) => student.assessmentStatus === "Started").length;
+  const totalLoggedIn = students.filter((student) => student.lastLogin || ["Logged In", "Started", "Completed"].includes(student.assessmentStatus)).length;
 
   return {
     studentsInvited: students.length,
-    studentsLoggedIn: loggedInStudents,
-    studentsWaiting: Math.max(0, loggedInStudents - startedStudents),
+    studentsLoggedIn: totalLoggedIn,
+    studentsWaiting: loggedInStudents,
     studentsStarted: startedStudents,
     studentsCompleted: students.filter((student) => student.assessmentStatus === "Completed").length,
     averageScore: scores.length ? Math.round(scores.reduce((total, score) => total + score, 0) / scores.length) : 0,
@@ -195,7 +196,7 @@ router.post(
       const examStart = getExamStartDate(drive.examDate, drive.examTime);
       const activationOpenAt = new Date(examStart.getTime() - 10 * 60 * 1000);
       const expiresAt = new Date(examStart.getTime() + Number(drive.durationMinutes) * 60 * 1000);
-      const clientUrl = process.env.CLIENT_URL || "http://localhost:5173";
+      const clientUrl = (process.env.CLIENT_URL || "http://localhost:5173").replace(/\/+$/, "");
 
       const invitations = [];
 
@@ -424,7 +425,7 @@ router.post("/:driveId/reminders", requireCompany, async (req, res) => {
   }
 
   const invitations = await Invitation.find({ drive: drive._id }).populate("student");
-  const clientUrl = process.env.CLIENT_URL || "http://localhost:5173";
+  const clientUrl = (process.env.CLIENT_URL || "http://localhost:5173").replace(/\/+$/, "");
   let sent = 0;
   let failed = 0;
 
@@ -486,14 +487,24 @@ router.get("/:driveId/download/:type", requireCompany, async (req, res) => {
   }
 
   const students = await Student.find({ drive: drive._id }).sort({ createdAt: 1 });
+  const invitations = await Invitation.find({ drive: drive._id });
+  const invitationByStudentId = new Map(invitations.map((invitation) => [String(invitation.student), invitation]));
+  const mergedStudents = students.map((student) => {
+    const invitation = invitationByStudentId.get(String(student._id));
+    return {
+      ...student.toObject(),
+      invitationStatus: invitation?.invitationStatus ?? "Pending",
+      emailSent: invitation?.emailSent ?? false,
+    };
+  });
 
   if (req.params.type === "qualified") {
-    const qualifiedRows = buildResultRows(students.filter((student) => student.result === "Qualified"));
+    const qualifiedRows = buildResultRows(mergedStudents.filter((student) => student.result === "Qualified"));
     return sendCsv(res, `${drive.driveName}-qualified-students.csv`, qualifiedRows);
   }
 
   if (req.params.type === "results") {
-    return sendCsv(res, `${drive.driveName}-results.csv`, buildResultRows(students));
+    return sendCsv(res, `${drive.driveName}-results.csv`, buildResultRows(mergedStudents));
   }
 
   if (req.params.type === "report") {

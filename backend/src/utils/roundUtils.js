@@ -83,8 +83,8 @@ export function getCurrentRound(drive, student) {
   for (const round of rounds) {
     const result = (student.roundResults || []).find(r => normalizeRoundName(r.roundName) === round);
     const isCompleted = result?.status === "Completed" || (
-      round === "Aptitude" ? (student.aptitudeScore !== null && student.aptitudeScore !== undefined && student.roundResults?.some(r => r.roundName === "Aptitude")) :
-      round === "Coding" ? (student.codingScore !== null && student.codingScore !== undefined && student.roundResults?.some(r => r.roundName === "Coding")) :
+      round === "Aptitude" ? (student.aptitudeScore !== null && student.aptitudeScore !== undefined) :
+      round === "Coding" ? (student.codingScore !== null && student.codingScore !== undefined) :
       round === "Technical Oral" ? (student.technicalOralStatus === "Completed") : false
     );
 

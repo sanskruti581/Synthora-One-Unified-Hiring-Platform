@@ -60,6 +60,9 @@ export type StudentDashboardData = {
   score?: number | null;
   aptitudeScore?: number | null;
   codingScore?: number | null;
+  codingStatus?: string;
+  codingAccessStartsAt?: string;
+  codingAccessExpiresAt?: string;
   overallScore?: number | null;
   technicalOralScore?: number | null;
   technicalOralStatus?: string;
@@ -91,6 +94,9 @@ export type AssessmentData = {
   technicalOralCutoff?: number;
   aptitudeScore?: number | null;
   codingScore?: number | null;
+  codingStatus?: string;
+  codingAccessStartsAt?: string;
+  codingAccessExpiresAt?: string;
   overallScore?: number | null;
   technicalOralScore?: number | null;
   technicalOralStatus?: string;

@@ -36,10 +36,6 @@ router.get("/questions/:driveId", requireStudent, async (req, res) => {
       return res.status(403).json({ error: "This drive does not have a Coding round" });
     }
 
-    // Allow access when:
-    //  (a) the student's currentRound is Coding (normal flow after assessment init), OR
-    //  (b) the student has a Coding round result in any active state (In Progress / Completed)
-    //      — belt-and-suspenders for the rare case where currentRound hasn't persisted yet.
     const normalizedCurrent = normalizeRoundName(student.currentRound);
     const hasActiveCoding = (student.roundResults || []).some(
       r => normalizeRoundName(r.roundName) === "Coding" &&
@@ -156,8 +152,17 @@ router.post("/submit", requireStudent, async (req, res) => {
       };
     }
 
+    // Calculate pass/fail metrics across all submitted solutions
+    let totalPassed = 0;
+    let totalTestCases = 0;
+    for (const detail of Object.values(submissionDetails)) {
+      totalPassed += detail.results.passedCount;
+      totalTestCases += detail.results.totalCount;
+    }
+
     student.codingAnswers = solutions;
     student.codingScore = totalScore;
+    student.codingStatus = "Completed";
 
     // Remove any existing 'Coding' result before pushing
     student.roundResults = (student.roundResults || []).filter(r => normalizeRoundName(r.roundName) !== "Coding");
@@ -187,6 +192,7 @@ router.post("/submit", requireStudent, async (req, res) => {
         invitation.completedAt = student.completedAt;
         invitation.result = "Rejected";
         invitation.codingScore = totalScore;
+        invitation.codingStatus = "Completed";
         invitation.overallScore = student.overallScore;
         await invitation.save();
       }
@@ -220,16 +226,6 @@ router.post("/submit", requireStudent, async (req, res) => {
       student.completedAt = new Date();
       student.overallScore = calculateOverallScore(drive, student);
       student.result = determineFinalResult(drive, student);
-
-      const invitation = await Invitation.findOne({ student: student._id, drive: drive._id });
-      if (invitation) {
-        invitation.assessmentStatus = "Completed";
-        invitation.completedAt = student.completedAt;
-        invitation.result = student.result;
-        invitation.codingScore = totalScore;
-        invitation.overallScore = student.overallScore;
-        await invitation.save();
-      }
     }
 
     await student.save();
@@ -237,16 +233,16 @@ router.post("/submit", requireStudent, async (req, res) => {
     const invitation = await Invitation.findOne({ student: student._id, drive: drive._id });
     if (invitation) {
       invitation.codingScore = totalScore;
-      if (nextRound) invitation.currentRound = nextRound;
+      invitation.codingStatus = "Completed";
+      invitation.overallScore = student.overallScore;
+      if (nextRound) {
+        invitation.currentRound = nextRound;
+      } else {
+        invitation.assessmentStatus = "Completed";
+        invitation.completedAt = student.completedAt;
+        invitation.result = student.result;
+      }
       await invitation.save();
-    }
-
-    // Count total test-case pass/fail across all submitted solutions
-    let totalPassed = 0;
-    let totalTestCases = 0;
-    for (const detail of Object.values(submissionDetails)) {
-      totalPassed += detail.results.passedCount;
-      totalTestCases += detail.results.totalCount;
     }
 
     res.json({
@@ -294,12 +290,18 @@ router.get("/assessment/:driveId", requireStudent, async (req, res) => {
       needsSave = true;
     }
 
-    // Advance currentRound to Coding so that the questions and submit
-    // endpoints (which both check currentRound === "Coding") can proceed.
-    // This is safe: arriving at this endpoint means the student is starting
-    // the Coding round, regardless of how they navigated here.
     if (normalizeRoundName(student.currentRound) !== "Coding") {
       student.currentRound = "Coding";
+      needsSave = true;
+    }
+
+    if (student.codingStatus !== "In Progress" && student.codingStatus !== "Completed") {
+      student.codingStatus = "In Progress";
+      needsSave = true;
+    }
+
+    if (!student.codingStartedAt) {
+      student.codingStartedAt = codingResult.startedAt || new Date();
       needsSave = true;
     }
 
@@ -307,12 +309,14 @@ router.get("/assessment/:driveId", requireStudent, async (req, res) => {
       await student.save();
     }
     
-    const codingStartedAt = codingResult.startedAt || new Date();
+    const codingStartedAt = codingResult.startedAt || student.codingStartedAt || new Date();
+    const codingDurationMinutes = Number(drive.codingDurationMinutes || 45);
+    const sessionEndAt = new Date(new Date(codingStartedAt).getTime() + codingDurationMinutes * 60000);
 
-    // Determine exam end time bounds
-    const driveStartStr = `${drive.examDate}T${drive.examTime}`;
-    const examStartAt = new Date(driveStartStr);
-    const examEndAt = new Date(examStartAt.getTime() + drive.durationMinutes * 60000);
+    const examStartAt = student.codingAccessStartsAt || codingStartedAt;
+    const examEndAt = student.codingAccessExpiresAt && new Date(student.codingAccessExpiresAt).getTime() < sessionEndAt.getTime()
+      ? new Date(student.codingAccessExpiresAt)
+      : sessionEndAt;
 
     res.json({
       studentName: student.name,
@@ -322,11 +326,11 @@ router.get("/assessment/:driveId", requireStudent, async (req, res) => {
       examDate: drive.examDate,
       examTime: drive.examTime,
       durationMinutes: drive.durationMinutes,
-      codingDurationMinutes: drive.codingDurationMinutes || drive.durationMinutes,
+      codingDurationMinutes,
       assessmentStatus: student.assessmentStatus,
       currentRound: student.currentRound,
-      startedAt: codingStartedAt.toISOString(),
-      examStartAt: examStartAt.toISOString(),
+      startedAt: new Date(codingStartedAt).toISOString(),
+      examStartAt: new Date(examStartAt).toISOString(),
       examEndAt: examEndAt.toISOString()
     });
   } catch (err) {

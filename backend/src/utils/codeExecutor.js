@@ -1,5 +1,29 @@
 import vm from "vm";
 
+function normalizeOutput(str) {
+  if (typeof str !== "string") return "";
+  return str.replace(/\r\n/g, "\n").trim();
+}
+
+function areOutputsEqual(actual, expected) {
+  const normActual = normalizeOutput(actual);
+  const normExpected = normalizeOutput(expected);
+  if (normActual === normExpected) return true;
+
+  // Attempt JSON comparison if applicable (ignoring whitespace differences in JSON arrays/objects)
+  try {
+    const jsonActual = JSON.parse(normActual);
+    const jsonExpected = JSON.parse(normExpected);
+    if (JSON.stringify(jsonActual) === JSON.stringify(jsonExpected)) {
+      return true;
+    }
+  } catch {
+    // Not valid JSON, ignore
+  }
+
+  return false;
+}
+
 /**
  * Execute code against test cases.
  * V1: Uses a sandboxed eval approach for JavaScript only.
@@ -42,7 +66,7 @@ export async function executeCode({ language, sourceCode, testCases, timeLimit =
       require: (mod) => {
         if (mod === 'fs') {
           return {
-            readFileSync: (fd, enc) => {
+            readFileSync: (fd) => {
               if (fd === 0) return input;
               return "";
             }
@@ -71,8 +95,7 @@ export async function executeCode({ language, sourceCode, testCases, timeLimit =
       script.runInContext(context, { timeout: timeLimit });
       
       actualOutput = outputLogs.join("\n").trim();
-      // Simple string comparison for equality, trimming whitespace
-      if (actualOutput === expectedOutput.trim()) {
+      if (areOutputsEqual(actualOutput, expectedOutput)) {
         passed = true;
         passedCount++;
       }

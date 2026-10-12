@@ -18,6 +18,17 @@ export default function StudentDashboard() {
   const now = Date.now();
   const isCompleted = assessmentStatus.toLowerCase() === "completed";
   const isStarted = ["started", "in_progress", "in progress", "in-progress"].includes(assessmentStatus.toLowerCase());
+  const hasCodingRound = Boolean(assessment?.rounds?.includes("Coding"));
+  const isCodingCompleted = assessment?.codingStatus === "Completed" || (assessment?.codingScore !== null && assessment?.codingScore !== undefined);
+  const isCodingRound = assessment?.currentRound === "Coding";
+  const codingStartsAt = assessment?.codingAccessStartsAt;
+  const codingExpiresAt = assessment?.codingAccessExpiresAt;
+  const isCodingExpired = Boolean(codingExpiresAt && now > new Date(codingExpiresAt).getTime() && !isCodingCompleted);
+  const isWithinCodingWindow = !codingStartsAt || !codingExpiresAt || (
+    now >= new Date(codingStartsAt).getTime() && now <= new Date(codingExpiresAt).getTime()
+  );
+  const canStartCoding = isCodingRound && !isCodingCompleted && !isCodingExpired && isWithinCodingWindow;
+
   const hasTechnicalRound = Boolean(assessment?.rounds?.includes("Technical Oral"));
   const technicalStatus = assessment?.technicalAssessmentStatus ?? "Not Selected";
   const technicalStartsAt = assessment?.technicalAssessmentAccessStartsAt;
@@ -35,8 +46,14 @@ export default function StudentDashboard() {
     !isTechnicalCompleted &&
     !isTechnicalExpired &&
     isWithinTechnicalWindow;
-  const isFinalCompleted = isCompleted && (!hasTechnicalRound || isTechnicalCompleted || assessment?.result === "Rejected");
-  const isClosed = Boolean(assessment && !isCompleted && now >= new Date(examEndAt).getTime());
+  const isFinalCompleted =
+    assessment?.result === "Rejected" ||
+    (isCompleted &&
+      (!hasCodingRound || isCodingCompleted) &&
+      (!hasTechnicalRound || isTechnicalCompleted));
+  const isClosed = isCodingRound
+    ? isCodingExpired
+    : Boolean(assessment && !isCompleted && now >= new Date(examEndAt).getTime());
   const canStartNow =
     Boolean(assessment) &&
     assessment?.assessmentStatus === "Logged In" &&
@@ -224,15 +241,21 @@ export default function StudentDashboard() {
               </p>
               {isFinalCompleted ? (
                 <p className="mt-2 text-sm font-bold text-emerald-700 dark:text-emerald-200">Your assessment has been submitted successfully.</p>
+              ) : isCodingRound && !isCodingCompleted ? (
+                <p className="mt-2 text-sm font-bold text-sky-700 dark:text-sky-200">
+                  Congratulations! You qualified for the Coding Round. Click below to begin your coding assessment.
+                </p>
               ) : isCompleted && hasTechnicalRound ? (
                 <p className="mt-2 text-sm font-bold text-sky-700 dark:text-sky-200">
                   {canStartTechnical
                     ? "Congratulations! You qualified for the Technical Assessment. Click below or check your email to begin."
-                    : "Your Aptitude Assessment is completed."}
+                    : "Your assessment round is completed."}
                 </p>
               ) : null}
               {isClosed ? (
-                <p className="mt-2 text-sm font-bold text-rose-700 dark:text-rose-200">The assessment window closed at {formatTime(examEndAt)}.</p>
+                <p className="mt-2 text-sm font-bold text-rose-700 dark:text-rose-200">
+                  {isCodingRound ? "The Coding round access window has expired." : `The assessment window closed at ${formatTime(examEndAt)}.`}
+                </p>
               ) : null}
               {message ? <p className="mt-2 text-sm font-semibold text-rose-600">{message}</p> : null}
             </div>
@@ -249,6 +272,15 @@ export default function StudentDashboard() {
               >
                 <PlayCircle className="h-5 w-5" />
                 Start Technical Assessment
+              </button>
+            ) : canStartCoding ? (
+              <button
+                type="button"
+                onClick={handleStart}
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-sky-500 px-5 text-sm font-extrabold text-white shadow-lg shadow-sky-500/20 transition hover:-translate-y-0.5 hover:bg-sky-600"
+              >
+                <PlayCircle className="h-5 w-5" />
+                {assessment?.codingStatus === "Started" ? "Continue Coding Round" : "Start Coding Round"}
               </button>
             ) : isFinalCompleted ? (
               <div className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-extrabold text-white">
@@ -269,9 +301,9 @@ export default function StudentDashboard() {
               >
                 <PlayCircle className="h-5 w-5" />
                 {isStarted
-                  ? `Continue ${assessment?.currentRound === "Coding" ? "Coding Round" : "Assessment"}`
+                  ? `Continue Assessment`
                   : canStartNow
-                    ? `Start ${assessment?.currentRound === "Coding" ? "Coding Round" : "Aptitude Assessment"}`
+                    ? `Start Assessment`
                     : `Starts in ${formatCountdown(countdown)}`}
               </button>
             )}

@@ -62,7 +62,7 @@ export async function promoteStudentToTechnicalAssessment({ student, drive, comp
 
   const now = new Date();
   const expiresAt = new Date(now.getTime() + TECHNICAL_ACCESS_WINDOW_MS);
-  const clientUrl = process.env.CLIENT_URL || "http://localhost:5173";
+  const clientUrl = (process.env.CLIENT_URL || "http://localhost:5173").replace(/\/+$/, "");
   const assessmentLink = inv?.token ? `${clientUrl}/invite/${inv.token}` : `${clientUrl}/student/dashboard`;
 
   student.currentRound = "Technical Oral";

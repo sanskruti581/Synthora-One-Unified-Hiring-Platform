@@ -22,7 +22,28 @@ const app = express();
 const port = process.env.PORT || 5000;
 let server;
 
-app.use(cors({ origin: process.env.CLIENT_URL || "http://localhost:5173" }));
+const rawClientUrls = process.env.CLIENT_URL ? process.env.CLIENT_URL.split(",") : ["http://localhost:5173"];
+const allowedOrigins = rawClientUrls.map((u) => u.trim().replace(/\/+$/, ""));
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      const normalizedOrigin = origin.replace(/\/+$/, "");
+      if (
+        allowedOrigins.includes("*") ||
+        allowedOrigins.includes(normalizedOrigin) ||
+        normalizedOrigin.startsWith("http://localhost:") ||
+        normalizedOrigin.endsWith(".up.railway.app") ||
+        normalizedOrigin.endsWith(".vercel.app")
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
+    credentials: true,
+  }),
+);
 app.use(express.json());
 
 app.get("/api/health", (_req, res) => {

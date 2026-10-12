@@ -62,8 +62,8 @@ export default function DriveDetails() {
     if (filter === "All Students") return students;
     if (filter === "Pending") return students.filter((student) => student.assessmentStatus !== "Completed");
     if (filter === "In Progress") return students.filter((student) => student.assessmentStatus === "Started" || student.assessmentStatus === "In Progress");
-    if (filter === "Aptitude Completed") return students.filter(s => s.roundResults?.some(r => r.roundName === "Aptitude" && r.status === "Completed"));
-    if (filter === "Coding Completed") return students.filter(s => s.roundResults?.some(r => r.roundName === "Coding" && r.status === "Completed"));
+    if (filter === "Aptitude Completed") return students.filter(s => s.roundResults?.some(r => r.roundName === "Aptitude" && r.status === "Completed") || (s.aptitudeScore !== null && s.aptitudeScore !== undefined));
+    if (filter === "Coding Completed") return students.filter(s => s.roundResults?.some(r => r.roundName === "Coding" && r.status === "Completed") || (s.codingScore !== null && s.codingScore !== undefined));
     if (filter === "Completed") return students.filter((student) => student.assessmentStatus === "Completed");
     return students.filter((student) => student.result === filter);
   }, [filter, students]);
@@ -71,7 +71,7 @@ export default function DriveDetails() {
   const invitationsSent = useMemo(() => students.filter((student) => student.emailSent).length, [students]);
   const loggedInStudents = useMemo(() => students.filter((student) => student.assessmentStatus === "Logged In").length, [students]);
   const startedStudents = useMemo(() => students.filter((student) => student.assessmentStatus === "Started").length, [students]);
-  const waitingStudents = Math.max(0, loggedInStudents - startedStudents);
+  const waitingStudents = loggedInStudents;
   const completedStudents = useMemo(() => students.filter((student) => student.assessmentStatus === "Completed").length, [students]);
   const qualifiedStudents = useMemo(() => students.filter((student) => student.result === "Qualified").length, [students]);
   const rejectedStudents = useMemo(() => students.filter((student) => student.result === "Rejected").length, [students]);
@@ -255,7 +255,7 @@ export default function DriveDetails() {
                       </span>
                     </td>
                     <td className="px-4 py-3 flex items-center gap-2">
-                      {canSelectForTechnical(student) ? (
+                      {canSelectForTechnical(student, drive?.rounds) ? (
                         <button
                           type="button"
                           onClick={() => handleTechnicalInvite(student)}
@@ -275,8 +275,8 @@ export default function DriveDetails() {
                           <MessageSquare className="h-3.5 w-3.5" />
                           View Viva
                         </button>
-                      ) : !canSelectForTechnical(student) ? (
-                        <span className="text-xs text-slate-400">{getTechnicalActionText(student)}</span>
+                      ) : !canSelectForTechnical(student, drive?.rounds) ? (
+                        <span className="text-xs text-slate-400">{getTechnicalActionText(student, drive?.rounds)}</span>
                       ) : null}
                     </td>
                   </tr>
@@ -308,14 +308,26 @@ function Detail({ label, value }: { label: string; value: string }) {
   );
 }
 
-function canSelectForTechnical(student: DriveStudent) {
+function canSelectForTechnical(student: DriveStudent, driveRounds?: string[]) {
   const hasAptitudeResult = student.aptitudeScore !== null && student.aptitudeScore !== undefined;
   const technicalStatus = student.technicalAssessmentStatus ?? "Not Selected";
 
-  return hasAptitudeResult && technicalStatus === "Not Selected" && student.result !== "Rejected";
+  if (!hasAptitudeResult || technicalStatus !== "Not Selected" || student.result === "Rejected") {
+    return false;
+  }
+
+  if (driveRounds && driveRounds.includes("Coding")) {
+    const codingCleared = student.roundResults?.some(
+      r => r.roundName === "Coding" && (r.status === "Cleared" || r.status === "Completed")
+    ) || student.currentRound === "Technical Oral" || (student.codingScore !== null && student.codingScore !== undefined);
+
+    return Boolean(codingCleared);
+  }
+
+  return true;
 }
 
-function getTechnicalActionText(student: DriveStudent) {
+function getTechnicalActionText(student: DriveStudent, driveRounds?: string[]) {
   if (student.technicalAssessmentStatus === "Completed") {
     return "Completed";
   }
@@ -332,7 +344,22 @@ function getTechnicalActionText(student: DriveStudent) {
     return "Not eligible";
   }
 
-  return "Awaiting aptitude";
+  const hasAptitudeResult = student.aptitudeScore !== null && student.aptitudeScore !== undefined;
+  if (!hasAptitudeResult) {
+    return "Awaiting aptitude";
+  }
+
+  if (driveRounds && driveRounds.includes("Coding")) {
+    const codingCleared = student.roundResults?.some(
+      r => r.roundName === "Coding" && (r.status === "Cleared" || r.status === "Completed")
+    ) || student.currentRound === "Technical Oral" || (student.codingScore !== null && student.codingScore !== undefined);
+
+    if (!codingCleared) {
+      return "Awaiting coding";
+    }
+  }
+
+  return "Eligible";
 }
 
 function getTechnicalStatusClass(status?: string) {

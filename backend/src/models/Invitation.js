@@ -42,6 +42,14 @@ const invitationSchema = new mongoose.Schema(
     },
     score: { type: Number, default: null },
     aptitudeScore: { type: Number, default: null },
+    codingScore: { type: Number, default: null },
+    codingStatus: {
+      type: String,
+      enum: ["Not Selected", "Active", "In Progress", "Completed", "Expired"],
+      default: "Not Selected",
+    },
+    codingAccessStartsAt: Date,
+    codingAccessExpiresAt: Date,
     technicalOralScore: { type: Number, default: null },
     technicalOralStatus: { type: String, default: "Not Started" },
     technicalAssessmentStatus: {
@@ -66,6 +74,7 @@ const invitationSchema = new mongoose.Schema(
     },
     aptitudeClearedEmailSent: { type: Boolean, default: false },
     aptitudeClearedEmailError: String,
+    overallScore: { type: Number, default: null },
     result: {
       type: String,
       enum: ["Pending", "Qualified", "Rejected"],
