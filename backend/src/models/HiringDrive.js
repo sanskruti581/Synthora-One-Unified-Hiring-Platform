@@ -27,7 +27,7 @@ const hiringDriveSchema = new mongoose.Schema(
     technicalOralCutoff: { type: Number, default: 60 },
     technicalOralDurationMinutes: { type: Number, default: 20 },
     technicalOralWindowHours: { type: Number, default: 4 },
-    lastRegistrationDate: { type: String, required: true },
+    lastRegistrationDate: { type: String, required: false },
     status: { type: String, default: "Scheduled" },
     codingCutoff: { type: Number, default: 0 },
     codingDurationMinutes: { type: Number, default: 45 },

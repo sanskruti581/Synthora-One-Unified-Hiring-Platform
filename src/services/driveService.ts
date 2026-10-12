@@ -11,7 +11,7 @@ export type HiringDrivePayload = {
   rounds: string[];
   aptitudeCutoff: string;
   technicalOralCutoff?: string;
-  lastRegistrationDate: string;
+  lastRegistrationDate?: string;
 };
 
 export async function createHiringDrive(payload: HiringDrivePayload) {
@@ -55,7 +55,7 @@ export type HiringDrive = {
   durationMinutes: number;
   rounds: string[];
   aptitudeCutoff: number;
-  lastRegistrationDate: string;
+  lastRegistrationDate?: string;
   status: string;
   studentsInvited?: number;
   studentsLoggedIn?: number;
