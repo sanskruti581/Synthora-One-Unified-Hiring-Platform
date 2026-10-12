@@ -8,7 +8,7 @@ export type CodingQuestion = {
   description: string;
   constraints: string[];
   examples: { input: string; output: string; explanation?: string }[];
-  starterCode: { javascript?: string; python?: string };
+  starterCode: { javascript?: string; python?: string; java?: string; c?: string; cpp?: string };
   testCases: { input: string; expectedOutput: string }[];  // visible only
   marks: number;
 };
@@ -25,6 +25,7 @@ export type RunCodeResponse = {
   results: TestResult[];
   passedCount: number;
   totalCount: number;
+  compilationError?: string;
 };
 
 export type SubmitCodeResponse = {

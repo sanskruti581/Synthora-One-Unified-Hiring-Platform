@@ -25,15 +25,20 @@ const questions = [
       }
     ],
     starterCode: {
-      javascript: `function addNumbers(a, b) {\n  // Write your code here\n  \n}\n\n// Read from stdin to handle inputs\nconst fs = require('fs');\nconst input = fs.readFileSync(0, 'utf-8').trim().split('\\n');\nif (input.length >= 2) {\n  const a = parseInt(input[0], 10);\n  const b = parseInt(input[1], 10);\n  console.log(addNumbers(a, b));\n}`,
-      python: `def add_numbers(a, b):\n    # Write your code here\n    pass\n\nif __name__ == "__main__":\n    import sys\n    input_data = sys.stdin.read().strip().split('\\n')\n    if len(input_data) >= 2:\n        a = int(input_data[0])\n        b = int(input_data[1])\n        print(add_numbers(a, b))`
+      javascript: `function addNumbers(a, b) {\n  // Return the sum of a and b\n  return a + b;\n}\n\n// Read inputs from standard input\nconst fs = require('fs');\nconst input = fs.readFileSync(0, 'utf-8').trim().split(/\\s+/);\nif (input.length >= 2) {\n  const a = parseInt(input[0], 10);\n  const b = parseInt(input[1], 10);\n  console.log(addNumbers(a, b));\n}`,
+      python: `def add_numbers(a, b):\n    # Return the sum of a and b\n    return a + b\n\nif __name__ == "__main__":\n    import sys\n    tokens = sys.stdin.read().split()\n    if len(tokens) >= 2:\n        a = int(tokens[0])\n        b = int(tokens[1])\n        print(add_numbers(a, b))`,
+      java: `import java.util.Scanner;\n\npublic class Solution {\n    public static int addNumbers(int a, int b) {\n        // Return the sum of a and b\n        return a + b;\n    }\n\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        if (scanner.hasNextInt()) {\n            int a = scanner.nextInt();\n            int b = scanner.nextInt();\n            System.out.println(addNumbers(a, b));\n        }\n        scanner.close();\n    }\n}`,
+      c: `#include <stdio.h>\n\nint addNumbers(int a, int b) {\n    // Return the sum of a and b\n    return a + b;\n}\n\nint main() {\n    int a, b;\n    if (scanf("%d %d", &a, &b) == 2) {\n        printf("%d\\n", addNumbers(a, b));\n    }\n    return 0;\n}`,
+      cpp: `#include <iostream>\n\nusing namespace std;\n\nint addNumbers(int a, int b) {\n    // Return the sum of a and b\n    return a + b;\n}\n\nint main() {\n    int a, b;\n    if (cin >> a >> b) {\n        cout << addNumbers(a, b) << endl;\n    }\n    return 0;\n}`
     },
     testCases: [
       { input: "2\n3", expectedOutput: "5", isHidden: false },
       { input: "10\n-4", expectedOutput: "6", isHidden: false },
       { input: "0\n0", expectedOutput: "0", isHidden: true },
       { input: "100\n250", expectedOutput: "350", isHidden: true },
-      { input: "-15\n-35", expectedOutput: "-50", isHidden: true }
+      { input: "-15\n-35", expectedOutput: "-50", isHidden: true },
+      { input: "0\n-99", expectedOutput: "-99", isHidden: true },
+      { input: "1000000\n2000000", expectedOutput: "3000000", isHidden: true }
     ],
     marks: 10,
     timeLimit: 2000,

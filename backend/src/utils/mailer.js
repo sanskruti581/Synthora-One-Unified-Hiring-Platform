@@ -26,6 +26,34 @@ function hasSmtpConfig() {
   return Boolean(host && auth.user && auth.pass);
 }
 
+export function formatGreetingName(name) {
+  if (!name) return "Candidate";
+  const trimmed = String(name).trim();
+  const lower = trimmed.toLowerCase();
+  const genericTitles = new Set([
+    "student records",
+    "student record",
+    "students",
+    "student",
+    "candidates",
+    "candidate",
+    "candidate name",
+    "student name",
+    "full name",
+    "name",
+    "records",
+    "record",
+    "unnamed",
+    "column 1",
+    "column 2",
+    "column 3"
+  ]);
+  if (genericTitles.has(lower) || /^column \d+$/i.test(lower)) {
+    return "Candidate";
+  }
+  return trimmed;
+}
+
 export async function sendStudentInvitationEmail({
   to,
   studentName,
@@ -50,8 +78,9 @@ export async function sendStudentInvitationEmail({
   });
 
   try {
+    const greeting = formatGreetingName(studentName);
     const text = [
-      `Dear ${studentName || "Student"},`,
+      `Dear ${greeting},`,
       "",
       `You have been invited by ${companyName} to participate in the recruitment process.`,
       "",
@@ -83,7 +112,7 @@ export async function sendStudentInvitationEmail({
       },
       html: `
       <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
-        <p>Dear ${studentName || "Student"},</p>
+        <p>Dear ${formatGreetingName(studentName)},</p>
         <p>You have been invited by ${companyName} to participate in the recruitment process.</p>
         <p><strong>Company</strong><br/>${companyName}</p>
         <p><strong>Job Role</strong><br/>${jobRole}</p>
@@ -147,9 +176,10 @@ export async function sendTechnicalAssessmentInvitationEmail({
     }
 
     const roundText = hasCoding ? "Aptitude and Coding Assessment rounds" : "Aptitude Assessment round";
+    const greeting = formatGreetingName(studentName);
 
     const text = [
-      `Dear ${studentName || "Student"},`,
+      `Dear ${greeting},`,
       "",
       `Congratulations! You have successfully cleared the ${roundText} for ${companyName}${scoreSummary}.`,
       "",
@@ -183,7 +213,7 @@ export async function sendTechnicalAssessmentInvitationEmail({
       },
       html: `
       <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
-        <p>Dear ${studentName || "Student"},</p>
+        <p>Dear ${formatGreetingName(studentName)},</p>
         <p>Congratulations! You have successfully cleared the <strong>${roundText}</strong> for <strong>${companyName}</strong>${scoreSummary ? `${scoreSummary}` : ""}.</p>
         <p>You have qualified for the next round and are invited to take the <strong>Technical Oral Round (AI Viva)</strong>.</p>
         <p><strong>Company</strong><br/>${companyName}</p>
@@ -231,8 +261,9 @@ export async function sendAptitudeClearedEmail({
   });
 
   try {
+    const greeting = formatGreetingName(studentName);
     const text = [
-      `Dear ${studentName || "Student"},`,
+      `Dear ${greeting},`,
       "",
       `Congratulations! You have successfully cleared the Aptitude Assessment for ${companyName}${typeof score === "number" ? ` with a score of ${score}/100` : ""}.`,
       "",
@@ -259,7 +290,7 @@ export async function sendAptitudeClearedEmail({
       },
       html: `
       <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
-        <p>Dear ${studentName || "Student"},</p>
+        <p>Dear ${formatGreetingName(studentName)},</p>
         <p>Congratulations! You have successfully cleared the Aptitude Assessment for <strong>${companyName}</strong>${typeof score === "number" ? ` with a score of <strong>${score}/100</strong>` : ""}.</p>
         <p><strong>Company</strong><br/>${companyName}</p>
         <p><strong>Job Role</strong><br/>${jobRole}</p>

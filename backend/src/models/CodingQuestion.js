@@ -14,6 +14,9 @@ const codingQuestionSchema = new mongoose.Schema({
   starterCode: {
     javascript: String,
     python: String,
+    java: String,
+    c: String,
+    cpp: String,
   },
   testCases: [{
     input: String,
