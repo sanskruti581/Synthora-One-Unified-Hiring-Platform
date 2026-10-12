@@ -148,7 +148,7 @@ router.post(
         return res.status(404).json({ message: "Company account not found" });
       }
 
-      if (!req.body.driveName || !req.body.jobRole || !req.body.examDate || !req.body.examTime || !req.body.durationMinutes || !req.body.aptitudeCutoff || !req.body.lastRegistrationDate) {
+      if (!req.body.driveName || !req.body.jobRole || !req.body.examDate || !req.body.examTime || !req.body.durationMinutes || !req.body.aptitudeCutoff) {
         return res.status(400).json({ message: "All hiring drive fields are required" });
       }
 
@@ -190,7 +190,7 @@ router.post(
         rounds: parsedRounds,
         aptitudeCutoff: Number(req.body.aptitudeCutoff),
         technicalOralCutoff: Number(req.body.technicalOralCutoff || 60),
-        lastRegistrationDate: req.body.lastRegistrationDate,
+        lastRegistrationDate: req.body.lastRegistrationDate || undefined,
       });
 
       const examStart = getExamStartDate(drive.examDate, drive.examTime);

@@ -149,7 +149,7 @@ export default function DriveDetails() {
             <Detail label="Duration" value={`${drive.durationMinutes} minutes`} />
             <Detail label="Interview Rounds" value={drive.rounds.join(", ")} />
             <Detail label="Aptitude Cutoff" value={String(drive.aptitudeCutoff)} />
-            <Detail label="Registration Deadline" value={drive.lastRegistrationDate} />
+            {drive.lastRegistrationDate ? <Detail label="Registration Deadline" value={drive.lastRegistrationDate} /> : null}
             <Detail label="Job Description" value={drive.jobDescriptionFile?.originalName ?? "Not uploaded"} />
             <Detail label="Uploaded Excel" value={drive.studentFile?.originalName ?? "Not uploaded"} />
           </div>
