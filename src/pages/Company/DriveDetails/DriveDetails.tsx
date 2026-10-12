@@ -43,6 +43,7 @@ export default function DriveDetails() {
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [editExamDate, setEditExamDate] = useState("");
   const [editExamTime, setEditExamTime] = useState("");
+  const [editExamEndTime, setEditExamEndTime] = useState("");
   const [editDurationMinutes, setEditDurationMinutes] = useState("");
   const [notifyStudents, setNotifyStudents] = useState(true);
   const [isUpdatingSchedule, setIsUpdatingSchedule] = useState(false);
@@ -126,6 +127,7 @@ export default function DriveDetails() {
     if (!drive) return;
     setEditExamDate(drive.examDate || "");
     setEditExamTime(drive.examTime || "");
+    setEditExamEndTime(drive.examEndTime || "");
     setEditDurationMinutes(String(drive.durationMinutes || 60));
     setNotifyStudents(true);
     setScheduleError("");
@@ -135,7 +137,7 @@ export default function DriveDetails() {
   const handleUpdateSchedule = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!editExamTime) {
-      setScheduleError("Please specify a valid exam time.");
+      setScheduleError("Please specify a valid start window time.");
       return;
     }
     if (!editExamDate) {
@@ -150,12 +152,13 @@ export default function DriveDetails() {
       const res = await updateDriveSchedule(driveId, {
         examDate: editExamDate,
         examTime: editExamTime,
+        examEndTime: editExamEndTime || undefined,
         durationMinutes: Number(editDurationMinutes) || drive?.durationMinutes || 60,
         notifyStudents,
       });
 
       setMessage(
-        `Exam schedule updated to ${editExamDate} at ${editExamTime}! ${
+        `Exam schedule updated to ${editExamDate} (${editExamTime}${editExamEndTime ? ` - ${editExamEndTime}` : ""})! ${
           notifyStudents && res.data.notifiedStudents !== undefined
             ? `Updated invitations sent to ${res.data.notifiedStudents} student(s).`
             : ""
@@ -208,19 +211,19 @@ export default function DriveDetails() {
             <Detail label="Status" value={drive.status} />
             <div className="rounded-xl bg-blue-50/70 p-4 relative group">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-extrabold uppercase text-synthora-muted">Exam Schedule</p>
+                <p className="text-xs font-extrabold uppercase text-synthora-muted">Exam Window</p>
                 <button
                   type="button"
                   onClick={openScheduleModal}
                   className="inline-flex items-center gap-1 text-xs font-extrabold text-synthora-blue hover:text-synthora-blue-hover hover:underline"
-                  title="Modify exam date or time"
+                  title="Modify exam date or window times"
                 >
                   <CalendarClock className="h-3.5 w-3.5" />
                   Modify Time
                 </button>
               </div>
               <p className="mt-1 break-words text-sm font-bold text-synthora-text">
-                {drive.examDate} at {drive.examTime}
+                {drive.examDate} | {drive.examTime} {drive.examEndTime ? `– ${drive.examEndTime}` : "(Open Window)"}
               </p>
             </div>
             <Detail label="Duration" value={`${drive.durationMinutes} minutes`} />
@@ -418,7 +421,7 @@ export default function DriveDetails() {
 
               <div>
                 <label className="block text-xs font-extrabold uppercase text-synthora-muted mb-1.5">
-                  Exam Start Time
+                  Start Window Time
                 </label>
                 <input
                   type="time"
@@ -427,6 +430,21 @@ export default function DriveDetails() {
                   required
                   className="w-full h-11 rounded-xl border border-synthora-border bg-white px-3.5 text-sm font-bold text-synthora-text outline-none focus:border-synthora-blue focus:ring-2 focus:ring-synthora-blue/20"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-extrabold uppercase text-synthora-muted mb-1.5">
+                  End Window Time (Optional)
+                </label>
+                <input
+                  type="time"
+                  value={editExamEndTime}
+                  onChange={(e) => setEditExamEndTime(e.target.value)}
+                  className="w-full h-11 rounded-xl border border-synthora-border bg-white px-3.5 text-sm font-bold text-synthora-text outline-none focus:border-synthora-blue focus:ring-2 focus:ring-synthora-blue/20"
+                />
+                <span className="text-[11px] text-synthora-muted mt-1 block">
+                  Candidates can start anytime between Start and End times.
+                </span>
               </div>
 
               <div>

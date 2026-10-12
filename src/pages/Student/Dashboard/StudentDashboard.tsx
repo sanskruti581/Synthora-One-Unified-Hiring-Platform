@@ -13,7 +13,11 @@ export default function StudentDashboard() {
   const [message, setMessage] = useState("");
   const assessmentStatus = assessment?.assessmentStatus ?? "Pending";
   const examStartAt = assessment?.examStartAt ?? (assessment ? `${assessment.examDate}T${assessment.examTime}:00` : new Date().toISOString());
-  const examEndAt = assessment?.examEndAt ?? (assessment ? new Date(new Date(examStartAt).getTime() + Number(assessment.durationMinutes) * 60 * 1000).toISOString() : new Date().toISOString());
+  const examEndAt = assessment?.examEndAt ?? (assessment ? (
+    assessment.examEndTime
+      ? `${assessment.examDate}T${assessment.examEndTime}:00`
+      : new Date(new Date(examStartAt).getTime() + Math.max(Number(assessment.durationMinutes || 60), 360) * 60 * 1000).toISOString()
+  ) : new Date().toISOString());
   const countdown = useCountdown(examStartAt);
   const now = Date.now();
   const isCompleted = assessmentStatus.toLowerCase() === "completed";
@@ -131,8 +135,8 @@ export default function StudentDashboard() {
             <InfoTile icon={Building2} label="Company Name" value={assessment?.companyName ?? "-"} />
             <InfoTile icon={BriefcaseBusiness} label="Drive Name" value={assessment?.driveName ?? "-"} />
             <InfoTile icon={CalendarDays} label="Exam Date" value={assessment?.examDate ?? "-"} />
-            <InfoTile icon={Clock3} label="Exam Time" value={assessment?.examTime ?? "-"} />
-            <InfoTile icon={LockKeyhole} label="Closes At" value={assessment ? formatTime(examEndAt) : "-"} />
+            <InfoTile icon={Clock3} label="Window Start" value={assessment?.examTime ?? "-"} />
+            <InfoTile icon={LockKeyhole} label="Window Closes" value={assessment?.examEndTime ? assessment.examEndTime : (assessment ? formatTime(examEndAt) : "-")} />
             <InfoTile icon={CheckCircle2} label="Current Round" value={assessment?.currentRound ?? "Aptitude"} />
           </div>
 

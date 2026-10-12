@@ -7,7 +7,7 @@ import Student from "../models/Student.js";
 import Invitation from "../models/Invitation.js";
 import { requireCompany } from "../middleware/auth.js";
 import { parseStudentFile } from "../utils/parseStudentFile.js";
-import { createInvitationToken, createStudentPassword, getExamStartDate } from "../utils/tokens.js";
+import { createInvitationToken, createStudentPassword, getExamStartDate, getExamEndDate } from "../utils/tokens.js";
 import { sendStudentInvitationEmail } from "../utils/mailer.js";
 import {
   getTechnicalAssessmentState,
@@ -186,6 +186,7 @@ router.post(
         studentFile: { originalName: studentFile.originalname, mimeType: studentFile.mimetype, size: studentFile.size, data: studentFile.buffer },
         examDate: req.body.examDate,
         examTime: req.body.examTime,
+        examEndTime: req.body.examEndTime ? String(req.body.examEndTime).trim() : undefined,
         durationMinutes: Number(req.body.durationMinutes),
         rounds: parsedRounds,
         aptitudeCutoff: Number(req.body.aptitudeCutoff),
@@ -194,8 +195,9 @@ router.post(
       });
 
       const examStart = getExamStartDate(drive.examDate, drive.examTime);
-      const activationOpenAt = new Date(examStart.getTime() - 10 * 60 * 1000);
-      const expiresAt = new Date(examStart.getTime() + Number(drive.durationMinutes) * 60 * 1000);
+      const examEnd = getExamEndDate(drive);
+      const activationOpenAt = new Date(examStart.getTime() - 15 * 60 * 1000);
+      const expiresAt = examEnd;
       const clientUrl = (process.env.CLIENT_URL || "http://localhost:5173").replace(/\/+$/, "");
 
       const invitations = [];
@@ -241,6 +243,7 @@ router.post(
             jobRole: drive.jobRole,
             examDate: drive.examDate,
             examTime: drive.examTime,
+            examEndTime: drive.examEndTime,
             durationMinutes: drive.durationMinutes,
             activationLink,
           });
@@ -405,10 +408,10 @@ router.post("/:driveId/technical-assessment/:studentId/invite", requireCompany, 
 
 const updateDriveScheduleHandler = async (req, res) => {
   try {
-    const { examTime, examDate, durationMinutes, notifyStudents } = req.body;
+    const { examTime, examEndTime, examDate, durationMinutes, notifyStudents } = req.body;
 
-    if (!examTime && !examDate && durationMinutes === undefined) {
-      return res.status(400).json({ message: "Please provide an exam time, date, or duration to update." });
+    if (!examTime && !examEndTime && !examDate && durationMinutes === undefined) {
+      return res.status(400).json({ message: "Please provide an exam start time, end time, date, or duration to update." });
     }
 
     const drive = await HiringDrive.findOne({ _id: req.params.driveId, company: req.companyId });
@@ -419,6 +422,9 @@ const updateDriveScheduleHandler = async (req, res) => {
     if (examTime && typeof examTime === "string" && examTime.trim()) {
       drive.examTime = examTime.trim();
     }
+    if (examEndTime && typeof examEndTime === "string" && examEndTime.trim()) {
+      drive.examEndTime = examEndTime.trim();
+    }
     if (examDate && typeof examDate === "string" && examDate.trim()) {
       drive.examDate = examDate.trim();
     }
@@ -428,10 +434,11 @@ const updateDriveScheduleHandler = async (req, res) => {
 
     await drive.save();
 
-    // Recalculate schedule windows
+    // Recalculate schedule windows (Start Window to End Window)
     const examStart = getExamStartDate(drive.examDate, drive.examTime);
-    const activationOpenAt = new Date(examStart.getTime() - 10 * 60 * 1000);
-    const expiresAt = new Date(examStart.getTime() + Number(drive.durationMinutes) * 60 * 1000);
+    const examEnd = getExamEndDate(drive);
+    const activationOpenAt = new Date(examStart.getTime() - 15 * 60 * 1000);
+    const expiresAt = examEnd;
     const now = new Date();
 
     const invitations = await Invitation.find({ drive: drive._id }).populate("student");
@@ -444,9 +451,24 @@ const updateDriveScheduleHandler = async (req, res) => {
       invitation.activationOpenAt = activationOpenAt;
       invitation.expiresAt = expiresAt;
 
-      // Revive expired invitation if the new exam schedule extends into the future
-      if (invitation.invitationStatus === "Expired" && now < expiresAt) {
-        invitation.invitationStatus = invitation.usedAt ? "Activated" : "Pending";
+      // Revive invitation and student if new exam schedule window is active/future
+      if (now < expiresAt) {
+        if (invitation.invitationStatus === "Expired") {
+          invitation.invitationStatus = invitation.usedAt ? "Activated" : "Pending";
+        }
+        if (invitation.assessmentStatus === "Expired" || (invitation.assessmentStatus === "Pending" && !invitation.startedAt)) {
+          invitation.assessmentStatus = "Pending";
+        }
+
+        if (invitation.student && invitation.student.assessmentStatus !== "Completed") {
+          if (invitation.student.result === "Expired") {
+            invitation.student.result = "Pending";
+          }
+          if (invitation.student.assessmentStatus === "Closed" || invitation.student.assessmentStatus === "Expired") {
+            invitation.student.assessmentStatus = invitation.student.startedAt ? "Started" : "Pending";
+          }
+          await invitation.student.save();
+        }
       }
 
       if (notifyStudents && invitation.student?.email) {
@@ -459,6 +481,7 @@ const updateDriveScheduleHandler = async (req, res) => {
             jobRole: drive.jobRole,
             examDate: drive.examDate,
             examTime: drive.examTime,
+            examEndTime: drive.examEndTime,
             durationMinutes: drive.durationMinutes,
             activationLink: `${clientUrl}/invite/${invitation.token}`,
           });

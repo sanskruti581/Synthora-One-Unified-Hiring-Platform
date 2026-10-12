@@ -7,6 +7,7 @@ export type HiringDrivePayload = {
   studentFile: File | null;
   examDate: string;
   examTime: string;
+  examEndTime?: string;
   durationMinutes: string;
   rounds: string[];
   aptitudeCutoff: string;
@@ -52,6 +53,8 @@ export type HiringDrive = {
   };
   examDate: string;
   examTime: string;
+  examEndTime?: string;
+  examEndDate?: string;
   durationMinutes: number;
   rounds: string[];
   aptitudeCutoff: number;
@@ -155,6 +158,7 @@ export async function downloadDriveFile(driveId: string, type: "jd" | "students-
 
 export type UpdateDriveSchedulePayload = {
   examTime?: string;
+  examEndTime?: string;
   examDate?: string;
   durationMinutes?: number;
   notifyStudents?: boolean;

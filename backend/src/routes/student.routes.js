@@ -5,7 +5,7 @@ import HiringDrive from "../models/HiringDrive.js";
 import Company from "../models/Company.js";
 import { requireStudent } from "../middleware/auth.js";
 import jwt from "jsonwebtoken";
-import { getExamStartDate } from "../utils/tokens.js";
+import { getExamStartDate, getExamEndDate } from "../utils/tokens.js";
 import TechnicalOralInterview from "../models/TechnicalOralInterview.js";
 import { generateOralQuestion, evaluateSpokenAnswer, generateFinalOralSummary } from "../services/aiService.js";
 import { getTechnicalAssessmentState, promoteStudentToTechnicalAssessment } from "../utils/technicalAssessment.js";
@@ -31,9 +31,6 @@ async function getInvitationPayload(token) {
 // Login is no longer restricted to a 10-minute window before the exam.
 // Students may log in as soon as their invitation is valid.
 
-function getExamEndDate(drive) {
-  return new Date(getExamStartDate(drive.examDate, drive.examTime).getTime() + Number(drive.durationMinutes) * 60 * 1000);
-}
 
 function getCountdownSeconds(targetDate) {
   return Math.max(0, Math.ceil((new Date(targetDate).getTime() - Date.now()) / 1000));
@@ -298,15 +295,20 @@ router.get("/invite/:token", async (req, res) => {
   const examStartAt = getExamStartDate(drive.examDate, drive.examTime);
   const examEndAt = getExamEndDate(drive);
 
-  if (now > invitation.expiresAt && invitation.invitationStatus !== "Activated") {
+  // If exam window schedule extends into the future, revive any expired status
+  if (now < examEndAt && invitation.invitationStatus === "Expired") {
+    invitation.invitationStatus = invitation.usedAt ? "Activated" : "Pending";
+    await invitation.save();
+  }
+
+  if (now > examEndAt && invitation.invitationStatus !== "Activated") {
     invitation.invitationStatus = "Expired";
     await invitation.save();
   }
 
-  // canLogin: students may log in any time before the exam window closes (or has expired)
-  const invitationExpired = now > invitation.expiresAt && invitation.invitationStatus !== "Activated";
   const examClosed = now >= examEndAt;
-  const canLogin = !invitationExpired && !examClosed;
+  const isWindowOpen = now >= examStartAt && now < examEndAt;
+  const canLogin = !examClosed || Boolean(student.isActive || invitation.usedAt);
 
   return res.json({
     token: invitation.token,
@@ -319,23 +321,24 @@ router.get("/invite/:token", async (req, res) => {
     companyName: company.companyName,
     examDate: drive.examDate,
     examTime: drive.examTime,
+    examEndTime: drive.examEndTime,
     durationMinutes: drive.durationMinutes,
     status:
       invitation.assessmentStatus === "Completed"
         ? "Completed"
         : examClosed
           ? "Closed"
-          : invitation.assessmentStatus === "Started"
-            ? "Assessment Started"
-            : "Ready to Begin",
+          : isWindowOpen
+            ? (invitation.assessmentStatus === "Started" ? "Assessment Started" : "Ready to Begin")
+            : "Window Not Open",
     roundName: invitation.currentRound || "Aptitude",
     driveId: drive._id,
     examStartAt,
     examEndAt,
     canLogin,
-    canStartAssessment: now >= examStartAt && now < examEndAt,
+    canStartAssessment: isWindowOpen,
     examCountdownSeconds: getCountdownSeconds(examStartAt),
-    expiresAt: invitation.expiresAt,
+    expiresAt: examEndAt,
   });
 });
 
@@ -448,14 +451,19 @@ router.post("/invite/:token/start", async (req, res) => {
   const examStartAt = getExamStartDate(drive.examDate, drive.examTime);
   const examEndAt = getExamEndDate(drive);
 
-  // Invitation expiry check (unchanged)
-  if (now > invitation.expiresAt && invitation.invitationStatus !== "Activated") {
+  // If exam schedule was extended/updated and now < examEndAt, revive expired invitation
+  if (now < examEndAt && invitation.invitationStatus === "Expired") {
+    invitation.invitationStatus = invitation.usedAt ? "Activated" : "Pending";
+  }
+
+  // Invitation expiry check
+  if (now > examEndAt && invitation.invitationStatus !== "Activated") {
     invitation.invitationStatus = "Expired";
     await invitation.save();
     return res.status(403).json({ message: "This invitation has expired" });
   }
 
-  // Exam window closed check (unchanged)
+  // Exam window closed check
   if (now >= examEndAt) {
     return res.status(403).json({ message: "The assessment window has already closed.", examEndAt });
   }
@@ -580,6 +588,7 @@ router.get("/me/dashboard", requireStudent, async (req, res) => {
     jobRole: drive.jobRole,
     examDate: drive.examDate,
     examTime: drive.examTime,
+    examEndTime: drive.examEndTime,
     durationMinutes: drive.durationMinutes,
     rounds: drive.rounds,
     assessmentStatus: student.assessmentStatus,
@@ -627,6 +636,7 @@ router.get("/assessment/:driveId", requireStudent, async (req, res) => {
     driveId: drive._id,
     examDate: drive.examDate,
     examTime: drive.examTime,
+    examEndTime: drive.examEndTime,
     durationMinutes: drive.durationMinutes,
     assessmentStatus: student.assessmentStatus,
     startedAt: student.startedAt,

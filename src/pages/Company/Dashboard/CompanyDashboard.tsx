@@ -13,6 +13,7 @@ export default function CompanyDashboard() {
   const [activeDriveForSchedule, setActiveDriveForSchedule] = useState<HiringDrive | null>(null);
   const [editExamDate, setEditExamDate] = useState("");
   const [editExamTime, setEditExamTime] = useState("");
+  const [editExamEndTime, setEditExamEndTime] = useState("");
   const [editDurationMinutes, setEditDurationMinutes] = useState("");
   const [notifyStudents, setNotifyStudents] = useState(true);
   const [isUpdatingSchedule, setIsUpdatingSchedule] = useState(false);
@@ -33,6 +34,7 @@ export default function CompanyDashboard() {
     setActiveDriveForSchedule(drive);
     setEditExamDate(drive.examDate || "");
     setEditExamTime(drive.examTime || "");
+    setEditExamEndTime(drive.examEndTime || "");
     setEditDurationMinutes(String(drive.durationMinutes || 60));
     setNotifyStudents(true);
     setScheduleError("");
@@ -53,6 +55,7 @@ export default function CompanyDashboard() {
       const res = await updateDriveSchedule(activeDriveForSchedule._id, {
         examDate: editExamDate,
         examTime: editExamTime,
+        examEndTime: editExamEndTime || undefined,
         durationMinutes: Number(editDurationMinutes) || activeDriveForSchedule.durationMinutes,
         notifyStudents,
       });
@@ -60,7 +63,7 @@ export default function CompanyDashboard() {
       setDrives((current) =>
         current.map((d) => (d._id === activeDriveForSchedule._id ? { ...d, ...res.data.drive } : d))
       );
-      setMessage(`Exam schedule updated for ${activeDriveForSchedule.driveName} to ${editExamDate} at ${editExamTime}!`);
+      setMessage(`Exam schedule updated for ${activeDriveForSchedule.driveName} to ${editExamDate} (${editExamTime}${editExamEndTime ? ` - ${editExamEndTime}` : ""})!`);
       setActiveDriveForSchedule(null);
     } catch (err: unknown) {
       const msg =
@@ -140,7 +143,7 @@ export default function CompanyDashboard() {
                 </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-3">
                   <DriveFact label="Status" value={drive.status} />
-                  <DriveFact label="Exam Schedule" value={`${drive.examDate} at ${drive.examTime}`} />
+                  <DriveFact label="Exam Schedule" value={`${drive.examDate} (${drive.examTime}${drive.examEndTime ? ` - ${drive.examEndTime}` : ""})`} />
                   <DriveFact label="Students Invited" value={String(drive.studentsInvited ?? 0)} />
                 </div>
                 <div className="mt-4 flex flex-wrap gap-3">
@@ -230,7 +233,7 @@ export default function CompanyDashboard() {
 
               <div>
                 <label className="block text-xs font-extrabold uppercase text-synthora-muted mb-1.5">
-                  Exam Start Time
+                  Start Window Time
                 </label>
                 <input
                   type="time"
@@ -239,6 +242,21 @@ export default function CompanyDashboard() {
                   required
                   className="w-full h-11 rounded-xl border border-synthora-border bg-white px-3.5 text-sm font-bold text-synthora-text outline-none focus:border-synthora-blue focus:ring-2 focus:ring-synthora-blue/20"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-extrabold uppercase text-synthora-muted mb-1.5">
+                  End Window Time (Optional)
+                </label>
+                <input
+                  type="time"
+                  value={editExamEndTime}
+                  onChange={(e) => setEditExamEndTime(e.target.value)}
+                  className="w-full h-11 rounded-xl border border-synthora-border bg-white px-3.5 text-sm font-bold text-synthora-text outline-none focus:border-synthora-blue focus:ring-2 focus:ring-synthora-blue/20"
+                />
+                <span className="text-[11px] text-synthora-muted mt-1 block">
+                  Candidates can start anytime between Start and End times.
+                </span>
               </div>
 
               <div>

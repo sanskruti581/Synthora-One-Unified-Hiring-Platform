@@ -50,6 +50,7 @@ export type StudentDashboardData = {
   jobRole: string;
   examDate: string;
   examTime: string;
+  examEndTime?: string;
   durationMinutes: number;
   examStartAt?: string;
   examEndAt?: string;
@@ -82,6 +83,7 @@ export type AssessmentData = {
   driveId: string;
   examDate: string;
   examTime: string;
+  examEndTime?: string;
   durationMinutes: number;
   assessmentStatus: string;
   startedAt?: string;

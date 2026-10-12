@@ -14,6 +14,7 @@ type InvitationDetails = {
   jobRole: string;
   examDate: string;
   examTime: string;
+  examEndTime?: string;
   durationMinutes: number;
   status: string;
   roundName: string;
@@ -118,9 +119,9 @@ export default function ActivateInvitation() {
               <InviteDetailItem icon={BriefcaseBusiness} label="Target Job Role" value={details.jobRole} />
               <InviteDetailItem icon={ShieldCheck} label="Initial Round" value={details.roundName || "Aptitude Assessment"} />
               <InviteDetailItem icon={CalendarDays} label="Exam Date" value={details.examDate} />
-              <InviteDetailItem icon={Clock3} label="Scheduled Time" value={details.examTime} />
+              <InviteDetailItem icon={Clock3} label="Window Start Time" value={details.examTime} />
+              <InviteDetailItem icon={Clock3} label="Window Closes" value={details.examEndTime || formatTime(details.examEndAt)} />
               <InviteDetailItem icon={Timer} label="Allocated Duration" value={`${details.durationMinutes} minutes`} />
-              <InviteDetailItem icon={Clock3} label="Window Closes" value={formatTime(details.examEndAt)} />
             </div>
 
             {/* Instructions Box matching CompanyRegister terms styling */}

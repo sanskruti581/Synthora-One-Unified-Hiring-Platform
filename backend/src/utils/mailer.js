@@ -62,6 +62,7 @@ export async function sendStudentInvitationEmail({
   jobRole,
   examDate,
   examTime,
+  examEndTime,
   durationMinutes,
   activationLink,
 }) {
@@ -79,6 +80,7 @@ export async function sendStudentInvitationEmail({
 
   try {
     const greeting = formatGreetingName(studentName);
+    const windowText = examEndTime ? `${examTime} to ${examEndTime}` : `${examTime} onwards`;
     const text = [
       `Dear ${greeting},`,
       "",
@@ -89,8 +91,8 @@ export async function sendStudentInvitationEmail({
       `Hiring Drive: ${driveName}`,
       "Round: Aptitude Assessment",
       `Exam Date: ${examDate}`,
-      `Exam Time: ${examTime}`,
-      `Duration: ${durationMinutes} minutes`,
+      `Exam Window: ${windowText}`,
+      `Duration: ${durationMinutes} minutes (start anytime during the open window)`,
       "",
       "Please open your unique invitation link:",
       activationLink,
@@ -119,8 +121,8 @@ export async function sendStudentInvitationEmail({
         <p><strong>Hiring Drive</strong><br/>${driveName}</p>
         <p><strong>Round</strong><br/>Aptitude Assessment</p>
         <p><strong>Exam Date</strong><br/>${examDate}</p>
-        <p><strong>Exam Time</strong><br/>${examTime}</p>
-        <p><strong>Duration</strong><br/>${durationMinutes} minutes</p>
+        <p><strong>Exam Window</strong><br/>${windowText}</p>
+        <p><strong>Duration</strong><br/>${durationMinutes} minutes (You can start at any time during this window)</p>
         <p>Please use your unique invitation link below.</p>
         <p><a href="${activationLink}">${activationLink}</a></p>
         <p>This invitation is personal.<br/>Do not share this link.</p>

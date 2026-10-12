@@ -20,6 +20,7 @@ const hiringDriveSchema = new mongoose.Schema(
     examDate: { type: String, required: true },
     examTime: { type: String, required: true },
     examEndTime: { type: String },
+    examEndDate: { type: String },
     windowDurationHours: { type: Number, default: 6 },
     durationMinutes: { type: Number, required: true },
     rounds: [{ type: String, enum: ["Aptitude", "Technical Oral", "Coding", "HR Interview", "HR"] }],
