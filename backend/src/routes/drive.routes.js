@@ -7,7 +7,7 @@ import Student from "../models/Student.js";
 import Invitation from "../models/Invitation.js";
 import { requireCompany } from "../middleware/auth.js";
 import { parseStudentFile } from "../utils/parseStudentFile.js";
-import { createInvitationToken, createStudentPassword, getExamStartDate, getExamEndDate } from "../utils/tokens.js";
+import { createInvitationToken, createStudentPassword, getExamStartDate, getExamEndDate, normalizeTimeString } from "../utils/tokens.js";
 import { sendStudentInvitationEmail } from "../utils/mailer.js";
 import {
   getTechnicalAssessmentState,
@@ -18,6 +18,39 @@ import TechnicalOralInterview from "../models/TechnicalOralInterview.js";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
+
+function getExplicitWindowEndDate(examDate, examEndTime) {
+  const normalizedEndTime = normalizeTimeString(examEndTime);
+  return new Date(`${examDate}T${normalizedEndTime}:00`);
+}
+
+function validateAssessmentWindow({ examDate, examTime, examEndTime, durationMinutes }) {
+  if (!examDate || !examTime || !examEndTime) {
+    return "Assessment date, starting window time, and ending window time are required.";
+  }
+
+  const start = getExamStartDate(examDate, examTime);
+  const end = getExplicitWindowEndDate(examDate, examEndTime);
+  const duration = Number(durationMinutes);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return "Assessment start and end times must be valid.";
+  }
+
+  if (end.getTime() <= start.getTime()) {
+    return "Ending window time must be after the starting window time.";
+  }
+
+  if (!Number.isFinite(duration) || duration < 1) {
+    return "Assessment duration must be at least 1 minute.";
+  }
+
+  if (end.getTime() - start.getTime() < duration * 60 * 1000) {
+    return "Assessment duration must fit within the configured start and end window.";
+  }
+
+  return null;
+}
 
 function toPublicDrive(drive) {
   const data = drive.toObject();
@@ -148,8 +181,18 @@ router.post(
         return res.status(404).json({ message: "Company account not found" });
       }
 
-      if (!req.body.driveName || !req.body.jobRole || !req.body.examDate || !req.body.examTime || !req.body.durationMinutes || !req.body.aptitudeCutoff) {
+      if (!req.body.driveName || !req.body.jobRole || !req.body.examDate || !req.body.examTime || !req.body.examEndTime || !req.body.durationMinutes || !req.body.aptitudeCutoff) {
         return res.status(400).json({ message: "All hiring drive fields are required" });
+      }
+
+      const scheduleError = validateAssessmentWindow({
+        examDate: req.body.examDate,
+        examTime: req.body.examTime,
+        examEndTime: req.body.examEndTime,
+        durationMinutes: req.body.durationMinutes,
+      });
+      if (scheduleError) {
+        return res.status(400).json({ message: scheduleError });
       }
 
       if (!jobDescription) {
@@ -186,7 +229,7 @@ router.post(
         studentFile: { originalName: studentFile.originalname, mimeType: studentFile.mimetype, size: studentFile.size, data: studentFile.buffer },
         examDate: req.body.examDate,
         examTime: req.body.examTime,
-        examEndTime: req.body.examEndTime ? String(req.body.examEndTime).trim() : undefined,
+        examEndTime: String(req.body.examEndTime).trim(),
         durationMinutes: Number(req.body.durationMinutes),
         rounds: parsedRounds,
         aptitudeCutoff: Number(req.body.aptitudeCutoff),
@@ -308,6 +351,34 @@ router.get("/:driveId", requireCompany, async (req, res) => {
     const invitation = invitationByStudentId.get(String(student._id));
     const technicalAssessmentStatus = getTechnicalAssessmentState(student, invitation);
 
+    const aptitudeScore = student.aptitudeScore ?? student.score;
+    const aptitudeRound = (student.roundResults || []).find(r => r.roundName === "Aptitude");
+    const aptitudeMaxScore = aptitudeRound?.maxScore ?? 100;
+    const aptitudeStartedAt = student.startedAt || aptitudeRound?.startedAt;
+    const aptitudeCompletedAt = student.completedAt || aptitudeRound?.completedAt;
+
+    // Time spent calculation (in minutes)
+    let timeSpentMinutes = null;
+    if (aptitudeStartedAt && aptitudeCompletedAt) {
+      timeSpentMinutes = Math.round((new Date(aptitudeCompletedAt).getTime() - new Date(aptitudeStartedAt).getTime()) / 60000);
+    }
+
+    // Percentage score
+    const aptitudePercentage = (typeof aptitudeScore === "number" && aptitudeMaxScore > 0)
+      ? Math.round((aptitudeScore / aptitudeMaxScore) * 100)
+      : null;
+    const aptitudeCutoff = Number(drive.aptitudeCutoff ?? 0);
+
+    // Submission status
+    let submissionStatus = "Not Started";
+    if (student.assessmentStatus === "Completed") {
+      submissionStatus = "Submitted";
+    } else if (student.assessmentStatus === "Started") {
+      submissionStatus = "In Progress";
+    } else if (student.assessmentStatus === "Logged In") {
+      submissionStatus = "Not Started";
+    }
+
     return {
       _id: student._id,
       studentName: student.name,
@@ -318,15 +389,30 @@ router.get("/:driveId", requireCompany, async (req, res) => {
       deliveryStatus: invitation?.deliveryStatus ?? "Not Sent",
       sentTime: invitation?.sentTime,
       assessmentStatus: student.assessmentStatus,
+      submissionStatus,
       startedAt: student.startedAt,
       completedAt: student.completedAt,
+      timeSpentMinutes,
       currentRound: student.currentRound,
-      aptitudeScore: student.aptitudeScore ?? student.score,
+      // Aptitude round results
+      aptitudeScore,
+      aptitudeMaxScore,
+      aptitudePercentage,
+      aptitudeCutoff,
+      aptitudePassed: typeof aptitudePercentage === "number" ? aptitudePercentage >= aptitudeCutoff : null,
+      aptitudeStartedAt,
+      aptitudeCompletedAt,
+      // Coding round results
       codingScore: student.codingScore,
+      codingCutoff: drive.codingCutoff ?? 0,
+      codingPassed: typeof student.codingScore === "number" ? student.codingScore >= Number(drive.codingCutoff ?? 0) : null,
+      // Technical oral results
       overallScore: student.overallScore ?? student.score,
       roundResults: student.roundResults,
       technicalOralScore: student.technicalOralScore,
       technicalOralStatus: student.technicalOralStatus || "Not Started",
+      technicalOralCutoff: drive.technicalOralCutoff ?? 60,
+      technicalOralPassed: typeof student.technicalOralScore === "number" ? student.technicalOralScore >= Number(drive.technicalOralCutoff ?? 60) : null,
       technicalAssessmentStatus,
       technicalAssessmentInvitedAt: invitation?.technicalAssessmentInvitedAt || student.technicalAssessmentInvitedAt,
       technicalAssessmentAccessStartsAt: invitation?.technicalAssessmentAccessStartsAt || student.technicalAssessmentAccessStartsAt,
@@ -419,18 +505,27 @@ const updateDriveScheduleHandler = async (req, res) => {
       return res.status(404).json({ message: "Hiring drive not found" });
     }
 
-    if (examTime && typeof examTime === "string" && examTime.trim()) {
-      drive.examTime = examTime.trim();
+    const nextExamTime = examTime && typeof examTime === "string" && examTime.trim() ? examTime.trim() : drive.examTime;
+    const nextExamEndTime = examEndTime && typeof examEndTime === "string" && examEndTime.trim() ? examEndTime.trim() : drive.examEndTime;
+    const nextExamDate = examDate && typeof examDate === "string" && examDate.trim() ? examDate.trim() : drive.examDate;
+    const nextDurationMinutes = durationMinutes !== undefined && !isNaN(Number(durationMinutes))
+      ? Math.max(1, Number(durationMinutes))
+      : drive.durationMinutes;
+
+    const scheduleError = validateAssessmentWindow({
+      examDate: nextExamDate,
+      examTime: nextExamTime,
+      examEndTime: nextExamEndTime,
+      durationMinutes: nextDurationMinutes,
+    });
+    if (scheduleError) {
+      return res.status(400).json({ message: scheduleError });
     }
-    if (examEndTime && typeof examEndTime === "string" && examEndTime.trim()) {
-      drive.examEndTime = examEndTime.trim();
-    }
-    if (examDate && typeof examDate === "string" && examDate.trim()) {
-      drive.examDate = examDate.trim();
-    }
-    if (durationMinutes !== undefined && !isNaN(Number(durationMinutes))) {
-      drive.durationMinutes = Math.max(1, Number(durationMinutes));
-    }
+
+    drive.examTime = nextExamTime;
+    drive.examEndTime = nextExamEndTime;
+    drive.examDate = nextExamDate;
+    drive.durationMinutes = nextDurationMinutes;
 
     await drive.save();
 

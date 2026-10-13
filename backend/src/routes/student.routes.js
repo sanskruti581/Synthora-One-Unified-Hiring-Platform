@@ -3,6 +3,7 @@ import Invitation from "../models/Invitation.js";
 import Student from "../models/Student.js";
 import HiringDrive from "../models/HiringDrive.js";
 import Company from "../models/Company.js";
+import AptitudeQuestion from "../models/AptitudeQuestion.js";
 import { requireStudent } from "../middleware/auth.js";
 import jwt from "jsonwebtoken";
 import { getExamStartDate, getExamEndDate } from "../utils/tokens.js";
@@ -13,6 +14,40 @@ import { sendAptitudeClearedEmail } from "../utils/mailer.js";
 import { getNextRound, normalizeRoundName, calculateOverallScore, determineFinalResult, canAccessRound, getDriveRounds } from "../utils/roundUtils.js";
 
 const router = Router();
+
+// Demo aptitude questions used as fallback when no drive-specific questions are configured
+const DEMO_APTITUDE_QUESTIONS = [
+  {
+    question: "If a number is increased by 20% and then decreased by 20%, what is the net change?",
+    options: ["No change", "4% decrease", "4% increase", "2% decrease"],
+    correctAnswer: "4% decrease",
+    category: "Quantitative",
+  },
+  {
+    question: "A train covers 180 km in 3 hours. What is its average speed?",
+    options: ["45 km/h", "50 km/h", "60 km/h", "75 km/h"],
+    correctAnswer: "60 km/h",
+    category: "Quantitative",
+  },
+  {
+    question: "Choose the next term: 2, 6, 12, 20, 30, ?",
+    options: ["40", "42", "44", "48"],
+    correctAnswer: "42",
+    category: "Logical Reasoning",
+  },
+  {
+    question: "If 8 workers finish a task in 12 days, how many days will 6 workers take at the same rate?",
+    options: ["14", "16", "18", "20"],
+    correctAnswer: "16",
+    category: "Quantitative",
+  },
+  {
+    question: "Which word is closest in meaning to 'efficient'?",
+    options: ["Wasteful", "Productive", "Slow", "Careless"],
+    correctAnswer: "Productive",
+    category: "Verbal",
+  },
+];
 
 async function getInvitationPayload(token) {
   const invitation = await Invitation.findOne({ token });
@@ -46,6 +81,19 @@ function getDriveContext(drive) {
 
 function countAnsweredQuestions(interview) {
   return interview.questions.filter((question) => question.score !== null && question.score !== undefined).length;
+}
+
+function getAptitudePercentage(score, maxScore) {
+  const numericScore = Number(score);
+  const numericMax = Number(maxScore || 100);
+  if (!Number.isFinite(numericScore) || !Number.isFinite(numericMax) || numericMax <= 0) {
+    return 0;
+  }
+  return Math.round((numericScore / numericMax) * 100);
+}
+
+function isAptitudeScoreQualified(score, maxScore, cutoff) {
+  return getAptitudePercentage(score, maxScore) >= Number(cutoff || 0);
 }
 
 async function syncExpiredTechnicalWindow(student, invitation) {
@@ -629,6 +677,24 @@ router.get("/assessment/:driveId", requireStudent, async (req, res) => {
 
   const technicalAssessmentStatus = await syncExpiredTechnicalWindow(student, invitation);
 
+  const now = new Date();
+  const examEndAt = getExamEndDate(drive);
+  const durationMs = Number(drive.durationMinutes) * 60 * 1000;
+
+  // Compute server-authoritative personal deadline for the student
+  let aptitudeExpiresAt = student.aptitudeExpiresAt;
+  if (!aptitudeExpiresAt && student.startedAt) {
+    aptitudeExpiresAt = new Date(new Date(student.startedAt).getTime() + durationMs);
+    student.aptitudeExpiresAt = aptitudeExpiresAt;
+    await student.save();
+  }
+
+  // Check if the personal deadline has passed and auto-mark as expired
+  if (aptitudeExpiresAt && now >= new Date(aptitudeExpiresAt) && student.assessmentStatus === "Started") {
+    // Auto-finalize: assessment time expired on server side
+    // Return current state - the submit endpoint handles scoring
+  }
+
   res.json({
     studentName: student.name,
     companyName: company.companyName,
@@ -640,9 +706,14 @@ router.get("/assessment/:driveId", requireStudent, async (req, res) => {
     durationMinutes: drive.durationMinutes,
     assessmentStatus: student.assessmentStatus,
     startedAt: student.startedAt,
+    aptitudeExpiresAt,
     examStartAt: getExamStartDate(drive.examDate, drive.examTime),
-    examEndAt: getExamEndDate(drive),
-    canStartAssessment: new Date() >= getExamStartDate(drive.examDate, drive.examTime) && new Date() < getExamEndDate(drive),
+    examEndAt,
+    canStartAssessment:
+      student.assessmentStatus !== "Completed" &&
+      now >= getExamStartDate(drive.examDate, drive.examTime) &&
+      now < examEndAt &&
+      (student.assessmentStatus === "Started" || examEndAt.getTime() - now.getTime() >= durationMs),
     answers: student.answers instanceof Map ? Object.fromEntries(student.answers) : (student.answers || {}),
     rounds: drive.rounds,
     aptitudeCutoff: drive.aptitudeCutoff,
@@ -659,6 +730,52 @@ router.get("/assessment/:driveId", requireStudent, async (req, res) => {
     currentRound: student.currentRound,
     roundResults: student.roundResults,
   });
+});
+
+// GET /api/students/assessment/:driveId/questions — fetch aptitude questions for the student (no correct answers)
+router.get("/assessment/:driveId/questions", requireStudent, async (req, res) => {
+  try {
+    const student = await Student.findOne({ _id: req.studentId, drive: req.params.driveId });
+    if (!student) {
+      return res.status(404).json({ message: "Assessment not found for this student" });
+    }
+
+    // Only allow if assessment is started or pending
+    if (student.assessmentStatus === "Completed") {
+      return res.status(400).json({ message: "Assessment already submitted" });
+    }
+
+    // Look for drive-specific questions
+    const driveQuestions = await AptitudeQuestion.find({ drive: req.params.driveId }).sort({ questionNumber: 1 }).lean();
+
+    let questions;
+    if (driveQuestions.length > 0) {
+      // Strip correct answers before sending to client
+      questions = driveQuestions.map(q => ({
+        id: String(q._id),
+        question: q.question,
+        options: q.options,
+        marks: q.marks || 1,
+        category: q.category || "General",
+        difficulty: q.difficulty || "Medium",
+      }));
+    } else {
+      // Fallback: general demo questions (no answer key exposed)
+      questions = DEMO_APTITUDE_QUESTIONS.map((q, i) => ({
+        id: `demo_q${i + 1}`,
+        question: q.question,
+        options: q.options,
+        marks: 20,
+        category: q.category || "General",
+        difficulty: "Medium",
+      }));
+    }
+
+    res.json({ questions, totalQuestions: questions.length, usingDemoQuestions: driveQuestions.length === 0 });
+  } catch (err) {
+    console.error("[questions] Error fetching aptitude questions:", err);
+    res.status(500).json({ message: "Failed to fetch questions" });
+  }
 });
 
 router.post("/assessment/start", requireStudent, async (req, res) => {
@@ -719,6 +836,7 @@ router.post("/assessment/:driveId/start", requireStudent, async (req, res) => {
   const now = new Date();
   const examStartAt = getExamStartDate(drive.examDate, drive.examTime);
   const examEndAt = getExamEndDate(drive);
+  const durationMs = Number(drive.durationMinutes) * 60 * 1000;
 
   if (now < examStartAt) {
     return res.status(403).json({
@@ -732,8 +850,37 @@ router.post("/assessment/:driveId/start", requireStudent, async (req, res) => {
     return res.status(403).json({ message: "Assessment window is closed", examStartAt, examEndAt });
   }
 
+  // Prevent starting if insufficient time remains to complete the assessment
+  const remainingMs = examEndAt.getTime() - now.getTime();
+  if (remainingMs < durationMs) {
+    return res.status(403).json({
+      message: `Insufficient time remaining. The assessment requires ${drive.durationMinutes} minutes but only ${Math.floor(remainingMs / 60000)} minutes remain before the window closes.`,
+      examEndAt,
+    });
+  }
+
+  // If student already started, return the existing deadline (do NOT reset timer)
+  if (student.assessmentStatus === "Started" && student.aptitudeExpiresAt) {
+    return res.json({
+      message: "Assessment already in progress",
+      assessmentStatus: student.assessmentStatus,
+      startedAt: student.startedAt,
+      aptitudeExpiresAt: student.aptitudeExpiresAt,
+      currentRound: student.currentRound,
+    });
+  }
+
+  // If already completed, return completed status
+  if (student.assessmentStatus === "Completed") {
+    return res.status(400).json({ message: "Assessment already completed", assessmentStatus: "Completed" });
+  }
+
+  const startedAt = student.startedAt || now;
+  const aptitudeExpiresAt = new Date(startedAt.getTime() + durationMs);
+
   student.assessmentStatus = "Started";
-  student.startedAt = student.startedAt || now;
+  student.startedAt = startedAt;
+  student.aptitudeExpiresAt = aptitudeExpiresAt;
   student.currentRound = "Aptitude";
   await student.save();
 
@@ -746,6 +893,7 @@ router.post("/assessment/:driveId/start", requireStudent, async (req, res) => {
     message: "Assessment started",
     assessmentStatus: student.assessmentStatus,
     startedAt: student.startedAt,
+    aptitudeExpiresAt: student.aptitudeExpiresAt,
     currentRound: student.currentRound,
   });
 });
@@ -785,24 +933,84 @@ router.post("/assessment/complete", requireStudent, async (req, res) => {
   const company = await Company.findById(drive.company);
   const invitation = await Invitation.findOne({ student: student._id, drive: student.drive });
   const existingScore = student.aptitudeScore ?? student.score;
+  const existingAptitudeRound = (student.roundResults || []).find(r => normalizeRoundName(r.roundName) === "Aptitude");
+  const existingMaxScore = existingAptitudeRound?.maxScore || 100;
 
   if (student.assessmentStatus === "Completed" && typeof existingScore === "number") {
-    const existingQualified = existingScore >= Number(drive.aptitudeCutoff);
+    const existingQualified = isAptitudeScoreQualified(existingScore, existingMaxScore, drive.aptitudeCutoff);
+    const nextRound = existingQualified ? getNextRound(drive, "Aptitude") : null;
     return res.json({
       message: "Aptitude Assessment Completed",
       score: existingScore,
+      maxScore: existingMaxScore,
+      percentage: getAptitudePercentage(existingScore, existingMaxScore),
       result: student.result,
       isAptitudeQualified: existingQualified,
       qualifiedForOral: false,
-      nextRound: null,
+      nextRound: student.result === "Rejected" ? null : nextRound,
       completedAt: student.completedAt,
     });
   }
 
-  const answers = req.body.answers && typeof req.body.answers === "object" ? req.body.answers : {};
-  const score = Number(req.body.score ?? 0);
-  const isAptitudeQualified = score >= Number(drive.aptitudeCutoff);
+  const submittedAnswers = req.body.answers && typeof req.body.answers === "object" ? req.body.answers : {};
+  const storedAnswers = student.answers instanceof Map ? Object.fromEntries(student.answers) : (student.answers || {});
+  const answers = Object.keys(submittedAnswers).length > 0 ? submittedAnswers : storedAnswers;
   const completedAt = new Date();
+
+  // SERVER-SIDE SCORE CALCULATION: Never trust client-submitted score
+  let score = 0;
+  let totalMaxScore = 0;
+
+  // Look for drive-specific questions to calculate score authoritatively
+  const driveQuestions = await AptitudeQuestion.find({ drive: student.drive }).lean();
+
+  if (driveQuestions.length > 0) {
+    // Score against drive-configured questions
+    for (const q of driveQuestions) {
+      const questionId = String(q._id);
+      const questionMarks = q.marks || 1;
+      totalMaxScore += questionMarks;
+      const studentAnswer = answers[questionId];
+      if (studentAnswer && studentAnswer === q.correctAnswer) {
+        score += questionMarks;
+      }
+    }
+  } else {
+    // Score against demo questions (used when no drive questions exist)
+    for (let i = 0; i < DEMO_APTITUDE_QUESTIONS.length; i++) {
+      const q = DEMO_APTITUDE_QUESTIONS[i];
+      const questionId = `demo_q${i + 1}`;
+      const questionMarks = 20;
+      totalMaxScore += questionMarks;
+      const studentAnswer = answers[questionId];
+      if (studentAnswer && studentAnswer === q.correctAnswer) {
+        score += questionMarks;
+      }
+    }
+    // Fallback: if student used old numeric IDs (q1, q2...) accept those too
+    if (score === 0 && Object.keys(answers).length > 0) {
+      const legacyAnswers = answers;
+      const legacyMap = { q1: 0, q2: 1, q3: 2, q4: 3, q5: 4 };
+      let legacyScore = 0;
+      let legacyMax = 0;
+      for (const [qId, answer] of Object.entries(legacyAnswers)) {
+        const idx = legacyMap[qId];
+        if (idx !== undefined) {
+          legacyMax += 20;
+          if (answer === DEMO_APTITUDE_QUESTIONS[idx]?.correctAnswer) {
+            legacyScore += 20;
+          }
+        }
+      }
+      if (legacyMax > 0) {
+        score = legacyScore;
+        totalMaxScore = legacyMax;
+      }
+    }
+  }
+
+  const isAptitudeQualified = isAptitudeScoreQualified(score, totalMaxScore || 100, drive.aptitudeCutoff);
+  const aptitudePercentage = getAptitudePercentage(score, totalMaxScore || 100);
 
   // Save basic aptitude info
   student.answers = answers;
@@ -815,7 +1023,8 @@ router.post("/assessment/complete", requireStudent, async (req, res) => {
     roundName: "Aptitude",
     status: "Completed",
     score: score,
-    maxScore: (Object.keys(answers).length || 0) * 20 || 100,
+    maxScore: totalMaxScore || 100,
+    startedAt: student.startedAt,
     completedAt: completedAt,
   });
 
@@ -840,6 +1049,8 @@ router.post("/assessment/complete", requireStudent, async (req, res) => {
     return res.json({
       message: "Aptitude Assessment Completed. Cutoff not cleared.",
       score,
+      maxScore: totalMaxScore || 100,
+      percentage: aptitudePercentage,
       result: "Rejected",
       isAptitudeQualified: false,
       nextRound: null,
@@ -889,6 +1100,8 @@ router.post("/assessment/complete", requireStudent, async (req, res) => {
     return res.json({
       message: `Aptitude round completed! Next round is ${nextRound}.`,
       score,
+      maxScore: totalMaxScore || 100,
+      percentage: aptitudePercentage,
       result: "Qualified",
       isAptitudeQualified: true,
       nextRound,
@@ -914,6 +1127,8 @@ router.post("/assessment/complete", requireStudent, async (req, res) => {
     return res.json({
       message: "Assessment result stored",
       score,
+      maxScore: totalMaxScore || 100,
+      percentage: aptitudePercentage,
       result: "Qualified",
       isAptitudeQualified: true,
       nextRound: null,

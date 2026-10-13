@@ -61,7 +61,7 @@ async function startServer() {
   try {
     await connectDatabase();
     await seedCodingQuestions();
-    
+
     server = app.listen(port, () => {
       console.log(`Synthora backend running on http://localhost:${port}`);
     });

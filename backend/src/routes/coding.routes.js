@@ -18,34 +18,64 @@ import { promoteStudentToTechnicalAssessment } from "../utils/technicalAssessmen
 
 const router = Router();
 
+function getCodingResult(student) {
+  return (student.roundResults || []).find(r => normalizeRoundName(r.roundName) === "Coding");
+}
+
+function getCodingDeadline(student, drive) {
+  const durationMinutes = Number(drive.codingDurationMinutes || 45);
+  const startedAt = student.codingStartedAt || getCodingResult(student)?.startedAt;
+  if (!startedAt) return null;
+  const sessionEndAt = new Date(new Date(startedAt).getTime() + durationMinutes * 60000);
+  if (student.codingAccessExpiresAt && new Date(student.codingAccessExpiresAt).getTime() < sessionEndAt.getTime()) {
+    return new Date(student.codingAccessExpiresAt);
+  }
+  return sessionEndAt;
+}
+
+function hasCodingDeadlineExpired(student, drive) {
+  const deadline = getCodingDeadline(student, drive);
+  return Boolean(deadline && Date.now() > deadline.getTime());
+}
+
+async function loadAuthorizedCodingContext(req, res, driveId) {
+  const student = await Student.findById(req.studentId);
+  const drive = await HiringDrive.findById(driveId);
+
+  if (!student || !drive) {
+    res.status(404).json({ error: "Student or Drive not found" });
+    return null;
+  }
+
+  if (String(student.drive) !== String(drive._id)) {
+    res.status(403).json({ error: "This coding round is not assigned to your account" });
+    return null;
+  }
+
+  const driveHasCoding = (drive.rounds || []).some(r => normalizeRoundName(r) === "Coding");
+  if (!driveHasCoding) {
+    res.status(403).json({ error: "This drive does not have a Coding round" });
+    return null;
+  }
+
+  if (!canAccessRound(drive, student, "Coding") || student.result === "Rejected") {
+    res.status(403).json({ error: "You must complete and qualify previous rounds before accessing the Coding round" });
+    return null;
+  }
+
+  return { student, drive };
+}
+
 // GET /api/coding/questions/:driveId
 router.get("/questions/:driveId", requireStudent, async (req, res) => {
   try {
-    const student = await Student.findById(req.studentId);
-    const drive = await HiringDrive.findById(req.params.driveId);
-
-    if (!student || !drive) {
-      return res.status(404).json({ error: "Student or Drive not found" });
-    }
-
-    // Verify the drive actually has a Coding round configured
-    const driveHasCoding = (drive.rounds || []).some(
-      r => normalizeRoundName(r) === "Coding"
-    );
-    if (!driveHasCoding) {
-      return res.status(403).json({ error: "This drive does not have a Coding round" });
-    }
+    const context = await loadAuthorizedCodingContext(req, res, req.params.driveId);
+    if (!context) return;
+    const { student, drive } = context;
 
     const normalizedCurrent = normalizeRoundName(student.currentRound);
-    const hasActiveCoding = (student.roundResults || []).some(
-      r => normalizeRoundName(r.roundName) === "Coding" &&
-           (r.status === "Completed" || r.status === "In Progress")
-    );
-
-    // Ensure student has cleared Aptitude round before accessing Coding questions
-    if (!canAccessRound(drive, student, "Coding") || student.result === "Rejected") {
-      return res.status(403).json({ error: "You must complete and qualify the Aptitude round before accessing the Coding round" });
-    }
+    const codingResult = getCodingResult(student);
+    const hasActiveCoding = codingResult && (codingResult.status === "Completed" || codingResult.status === "In Progress");
 
     if (normalizedCurrent !== "Coding" && !hasActiveCoding) {
       console.warn(
@@ -53,6 +83,12 @@ router.get("/questions/:driveId", requireStudent, async (req, res) => {
         ` hasActiveCoding=${hasActiveCoding}`
       );
       return res.status(403).json({ error: "Not currently on the Coding round" });
+    }
+
+    if (hasCodingDeadlineExpired(student, drive) && student.codingStatus !== "Completed") {
+      student.codingStatus = "Expired";
+      await student.save();
+      return res.status(403).json({ error: "Coding round deadline has expired" });
     }
 
     // Get all coding questions
@@ -74,7 +110,14 @@ router.get("/questions/:driveId", requireStudent, async (req, res) => {
 // POST /api/coding/run
 router.post("/run", requireStudent, async (req, res) => {
   try {
-    const { language, sourceCode, questionId } = req.body;
+    const { language, sourceCode, questionId, driveId } = req.body;
+    const context = await loadAuthorizedCodingContext(req, res, driveId);
+    if (!context) return;
+    const { student, drive } = context;
+
+    if (hasCodingDeadlineExpired(student, drive) || student.codingStatus === "Completed") {
+      return res.status(403).json({ error: "Coding round is closed" });
+    }
     
     const question = await CodingQuestion.findById(questionId);
     if (!question) {
@@ -98,26 +141,67 @@ router.post("/run", requireStudent, async (req, res) => {
   }
 });
 
+// POST /api/coding/save
+router.post("/save", requireStudent, async (req, res) => {
+  try {
+    const { driveId, solutions, autoSubmitted = false } = req.body;
+    const context = await loadAuthorizedCodingContext(req, res, driveId);
+    if (!context) return;
+    const { student, drive } = context;
+
+    if (student.codingStatus === "Completed") {
+      return res.status(400).json({ error: "Coding round already completed" });
+    }
+
+    if (hasCodingDeadlineExpired(student, drive)) {
+      return res.status(403).json({ error: "Coding round deadline has expired" });
+    }
+
+    student.codingDrafts = {
+      solutions: Array.isArray(solutions) ? solutions : [],
+      savedAt: new Date(),
+    };
+    await student.save();
+
+    res.json({ message: "Coding draft saved", savedAt: student.codingDrafts.savedAt });
+  } catch (err) {
+    console.error("[coding/save] Error:", err);
+    res.status(500).json({ error: err.message || "Server error" });
+  }
+});
+
 // POST /api/coding/submit
 router.post("/submit", requireStudent, async (req, res) => {
   try {
     const { driveId, solutions } = req.body;
-    
-    const student = await Student.findById(req.studentId);
-    const drive = await HiringDrive.findById(driveId);
-
-    if (!student || !drive) {
-      return res.status(404).json({ error: "Student or Drive not found" });
-    }
+    const context = await loadAuthorizedCodingContext(req, res, driveId);
+    if (!context) return;
+    const { student, drive } = context;
 
     if (normalizeRoundName(student.currentRound) !== "Coding") {
       return res.status(403).json({ error: "Not currently on the Coding round" });
     }
 
     // Check if Coding round already completed
-    const existingCodingResult = (student.roundResults || []).find(r => normalizeRoundName(r.roundName) === "Coding");
+    const existingCodingResult = getCodingResult(student);
     if (existingCodingResult && existingCodingResult.status === "Completed") {
-      return res.status(400).json({ error: "Coding round already completed" });
+      return res.json({
+        message: "Coding round already completed",
+        codingScore: student.codingScore ?? existingCodingResult.score ?? 0,
+        maxCodingScore: existingCodingResult.maxScore ?? 0,
+        passedCount: 0,
+        totalCount: 0,
+        nextRound: null,
+        result: student.result || "Pending",
+        overallScore: student.overallScore || null,
+        completedAt: existingCodingResult.completedAt ? new Date(existingCodingResult.completedAt).toISOString() : undefined,
+      });
+    }
+
+    if (hasCodingDeadlineExpired(student, drive) && !autoSubmitted) {
+      student.codingStatus = "Expired";
+      await student.save();
+      return res.status(403).json({ error: "Coding round deadline has expired. Final submission is closed." });
     }
 
     // Evaluate all answers against all test cases (including hidden)
@@ -172,14 +256,19 @@ router.post("/submit", requireStudent, async (req, res) => {
       status: "Completed",
       score: totalScore,
       maxScore: totalMaxScore,
+      startedAt: student.codingStartedAt,
       completedAt: new Date(),
       submission: submissionDetails
     });
 
     // Check qualification criteria for BOTH Aptitude Assessment and Coding Round
     const aptitudeScore = student.aptitudeScore ?? student.score;
+    const aptitudeRound = (student.roundResults || []).find(r => normalizeRoundName(r.roundName) === "Aptitude");
+    const aptitudePercentage = typeof aptitudeScore === "number"
+      ? (aptitudeScore / (aptitudeRound?.maxScore || 100)) * 100
+      : 100;
     const isAptitudeQualified = typeof aptitudeScore === "number"
-      ? (!drive.aptitudeCutoff || aptitudeScore >= Number(drive.aptitudeCutoff))
+      ? (!drive.aptitudeCutoff || aptitudePercentage >= Number(drive.aptitudeCutoff))
       : true;
     const isCodingQualified = !drive.codingCutoff || totalScore >= Number(drive.codingCutoff);
     const isBothQualified = isAptitudeQualified && isCodingQualified;
@@ -292,7 +381,7 @@ router.get("/assessment/:driveId", requireStudent, async (req, res) => {
     }
 
     let needsSave = false;
-    let codingResult = (student.roundResults || []).find(r => normalizeRoundName(r.roundName) === "Coding");
+    let codingResult = getCodingResult(student);
     if (!codingResult) {
       codingResult = { roundName: "Coding", status: "In Progress", startedAt: new Date() };
       student.roundResults.push(codingResult);
@@ -317,13 +406,17 @@ router.get("/assessment/:driveId", requireStudent, async (req, res) => {
       needsSave = true;
     }
 
-    if (needsSave) {
-      await student.save();
-    }
-    
     const codingStartedAt = codingResult.startedAt || student.codingStartedAt || new Date();
     const codingDurationMinutes = Number(drive.codingDurationMinutes || 45);
     const sessionEndAt = new Date(new Date(codingStartedAt).getTime() + codingDurationMinutes * 60000);
+    if (!student.codingExpiresAt || new Date(student.codingExpiresAt).getTime() !== sessionEndAt.getTime()) {
+      student.codingExpiresAt = sessionEndAt;
+      needsSave = true;
+    }
+
+    if (needsSave) {
+      await student.save();
+    }
 
     const examStartAt = student.codingAccessStartsAt || codingStartedAt;
     const examEndAt = student.codingAccessExpiresAt && new Date(student.codingAccessExpiresAt).getTime() < sessionEndAt.getTime()
@@ -343,7 +436,9 @@ router.get("/assessment/:driveId", requireStudent, async (req, res) => {
       currentRound: student.currentRound,
       startedAt: new Date(codingStartedAt).toISOString(),
       examStartAt: new Date(examStartAt).toISOString(),
-      examEndAt: examEndAt.toISOString()
+      examEndAt: examEndAt.toISOString(),
+      codingExpiresAt: student.codingExpiresAt?.toISOString(),
+      savedSolutions: student.codingDrafts?.solutions || []
     });
   } catch (err) {
     console.error(err);

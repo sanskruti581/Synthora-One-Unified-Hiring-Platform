@@ -87,12 +87,22 @@ export type DriveStudent = {
   deliveryStatus: string;
   sentTime?: string;
   assessmentStatus: string;
+  submissionStatus?: string;
   startedAt?: string;
   completedAt?: string;
+  timeSpentMinutes?: number | null;
   score?: number | null;
   aptitudeScore?: number | null;
+  aptitudeMaxScore?: number | null;
+  aptitudePercentage?: number | null;
+  aptitudeCutoff?: number | null;
+  aptitudePassed?: boolean | null;
+  aptitudeStartedAt?: string;
+  aptitudeCompletedAt?: string;
   technicalOralScore?: number | null;
   technicalOralStatus?: string;
+  technicalOralCutoff?: number | null;
+  technicalOralPassed?: boolean | null;
   technicalAssessmentStatus?: string;
   technicalAssessmentInvitedAt?: string;
   technicalAssessmentAccessStartsAt?: string;
@@ -102,8 +112,10 @@ export type DriveStudent = {
   result: string;
   currentRound?: string;
   codingScore?: number | null;
+  codingCutoff?: number | null;
+  codingPassed?: boolean | null;
   overallScore?: number | null;
-  roundResults?: { roundName: string; status: string; score?: number | null }[];
+  roundResults?: { roundName: string; status: string; score?: number | null; maxScore?: number | null; startedAt?: string; completedAt?: string }[];
 };
 
 export type DriveStats = {

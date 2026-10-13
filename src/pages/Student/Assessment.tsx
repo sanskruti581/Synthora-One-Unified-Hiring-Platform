@@ -1,50 +1,30 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, ArrowRight, Camera, CheckCircle2, Clock3, Maximize2, ShieldCheck } from "lucide-react";
-import ThemeToggle from "../../components/ThemeToggle";
-import { ProctoringGuard } from "../../components/ProctoringGuard";
-import { ProctoringReport } from "../../components/ProctoringReport";
-import { getAssessment, saveAssessmentAnswers, startAssessmentForDrive, submitAssessment, completeAptitudeRound, type AssessmentData } from "../../services/studentService";
-import { useCountdown } from "../../hooks/useCountdown";
-import { useDeviceDetection } from "../../hooks/useDeviceDetection";
-import { useFaceDetection } from "../../hooks/useFaceDetection";
-import { useTabFocusMonitor } from "../../hooks/useTabFocusMonitor";
-import { DEFAULT_PROCTORING_CONFIG, evaluateViolationState, isScreenshotShortcut } from "../../utils/proctoringViolationLogic";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  Camera,
+  CameraOff,
+  CheckCircle2,
+  Clock3,
+  Home,
+  ShieldCheck,
+  XCircle,
+} from "lucide-react";
+import { getAssessment, saveAssessmentAnswers, startAssessmentForDrive, submitAssessment, type AssessmentData } from "../../services/studentService";
 import { logProctoringEvent } from "../../services/proctoringService";
+import api from "../../services/api";
 import logo from "../../../images/logo.png";
 
-const questions = [
-  {
-    id: "q1",
-    question: "If a number is increased by 20% and then decreased by 20%, what is the net change?",
-    options: ["No change", "4% decrease", "4% increase", "2% decrease"],
-    answer: "4% decrease",
-  },
-  {
-    id: "q2",
-    question: "A train covers 180 km in 3 hours. What is its average speed?",
-    options: ["45 km/h", "50 km/h", "60 km/h", "75 km/h"],
-    answer: "60 km/h",
-  },
-  {
-    id: "q3",
-    question: "Choose the next term: 2, 6, 12, 20, 30, ?",
-    options: ["40", "42", "44", "48"],
-    answer: "42",
-  },
-  {
-    id: "q4",
-    question: "If 8 workers finish a task in 12 days, how many days will 6 workers take at the same rate?",
-    options: ["14", "16", "18", "20"],
-    answer: "16",
-  },
-  {
-    id: "q5",
-    question: "Which word is closest in meaning to 'efficient'?",
-    options: ["Wasteful", "Productive", "Slow", "Careless"],
-    answer: "Productive",
-  },
-];
+// ── Types ──────────────────────────────────────────────────────────────────────
+interface AptitudeQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  marks: number;
+  category: string;
+}
 
 interface ProctoringViolation {
   id: number;
@@ -53,151 +33,119 @@ interface ProctoringViolation {
   timestamp: string;
 }
 
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function formatTimer(ms: number): string {
+  if (ms <= 0) return "00:00";
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const mm = String(minutes).padStart(2, "0");
+  const ss = String(seconds).padStart(2, "0");
+  return hours > 0 ? `${String(hours).padStart(2, "0")}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+async function fetchAptitudeQuestions(driveId: string): Promise<AptitudeQuestion[]> {
+  try {
+    const response = await api.get<{ questions: AptitudeQuestion[] }>(`/students/assessment/${driveId}/questions`);
+    return response.data.questions || [];
+  } catch {
+    // Fallback to demo questions if API not available
+    return [
+      { id: "demo_q1", question: "If a number is increased by 20% and then decreased by 20%, what is the net change?", options: ["No change", "4% decrease", "4% increase", "2% decrease"], marks: 20, category: "Quantitative" },
+      { id: "demo_q2", question: "A train covers 180 km in 3 hours. What is its average speed?", options: ["45 km/h", "50 km/h", "60 km/h", "75 km/h"], marks: 20, category: "Quantitative" },
+      { id: "demo_q3", question: "Choose the next term: 2, 6, 12, 20, 30, ?", options: ["40", "42", "44", "48"], marks: 20, category: "Logical Reasoning" },
+      { id: "demo_q4", question: "If 8 workers finish a task in 12 days, how many days will 6 workers take at the same rate?", options: ["14", "16", "18", "20"], marks: 20, category: "Quantitative" },
+      { id: "demo_q5", question: "Which word is closest in meaning to 'efficient'?", options: ["Wasteful", "Productive", "Slow", "Careless"], marks: 20, category: "Verbal" },
+    ];
+  }
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 export default function Assessment() {
   const { driveId = "" } = useParams();
   const navigate = useNavigate();
+
+  // Assessment data
   const [assessment, setAssessment] = useState<AssessmentData | null>(null);
+  const [questions, setQuestions] = useState<AptitudeQuestion[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [loadingQuestions, setLoadingQuestions] = useState(false);
+
+  // UI state
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasStartedExam, setHasStartedExam] = useState(false);
-  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
-  const [proctorViolation, setProctorViolation] = useState("");
+  const [showPrepModal, setShowPrepModal] = useState(false);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [isSecuringExam, setIsSecuringExam] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(Boolean(document.fullscreenElement));
-  const [isProctorArmed, setIsProctorArmed] = useState(false);
-  const [isMicReady, setIsMicReady] = useState(false);
-  const [isCameraReady, setIsCameraReady] = useState(false);
-  const [showPrepModal, setShowPrepModal] = useState(false);
-  const [hasPermissionError, setHasPermissionError] = useState(false);
-  const [proctoringWarning, setProctoringWarning] = useState<string | null>(null);
-  const [proctoringViolations, setProctoringViolations] = useState<ProctoringViolation[]>([]);
-  const [violationCount, setViolationCount] = useState(0);
-  const [isAutoSubmitted, setIsAutoSubmitted] = useState(false);
-  const [isDemoMode, setIsDemoMode] = useState(Boolean(typeof window !== "undefined" && !window.localStorage.getItem("synthora-token")));
-  const [copyPasteToast, setCopyPasteToast] = useState<string | null>(null);
-  const [completionResult, setCompletionResult] = useState<{ score: number; isAptitudeQualified: boolean; nextRound?: string | null } | null>(null);
-  const hasSubmittedRef = useRef(false);
-  const violationCountRef = useRef(0);
+  const [isDemoMode] = useState(Boolean(typeof window !== "undefined" && !window.localStorage.getItem("synthora-token")));
+
+  // Camera
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraStatus, setCameraStatus] = useState<"idle" | "requesting" | "active" | "denied" | "unavailable">("idle");
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const examEndAt = useMemo(() => {
-    if (!assessment?.startedAt) {
-      return "";
-    }
 
-    return new Date(new Date(assessment.startedAt).getTime() + Number(assessment.durationMinutes) * 60 * 1000).toISOString();
-  }, [assessment?.durationMinutes, assessment?.startedAt]);
-  const fallbackStartTarget = useMemo(() => assessment?.examStartAt ?? new Date().toISOString(), [assessment?.examStartAt]);
-  const startCountdown = useCountdown(fallbackStartTarget);
-  const examCountdown = useCountdown(examEndAt || new Date().toISOString());
-  const activeCountdown = hasStartedExam && examEndAt ? examCountdown : startCountdown;
+  // Timer state (server-authoritative)
+  const [aptitudeExpiresAt, setAptitudeExpiresAt] = useState<string | null>(null);
+  const [timeRemainingMs, setTimeRemainingMs] = useState<number | null>(null);
+  const [showWarning, setShowWarning] = useState(false);
+
+  // Proctoring
+  const [proctoringViolations, setProctoringViolations] = useState<ProctoringViolation[]>([]);
+  const [isProctorArmed, setIsProctorArmed] = useState(false);
+
+  // Submission result
+  const [completionResult, setCompletionResult] = useState<{
+    score: number;
+    maxScore: number;
+    isAptitudeQualified: boolean;
+    nextRound?: string | null;
+    message?: string;
+  } | null>(null);
+
+  const hasSubmittedRef = useRef(false);
+  const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Derived ─────────────────────────────────────────────────────────────────
   const currentQuestion = questions[currentIndex];
-  const proctorReady = isDemoMode ? Boolean(isFullscreen && isMicReady && isCameraReady) : Boolean(cameraStream && isFullscreen && isMicReady && isCameraReady);
-  const canStartExam =
-    Boolean(assessment) &&
-    (isDemoMode || (
-      startCountdown.days === 0 &&
-      startCountdown.hours === 0 &&
-      startCountdown.minutes === 0 &&
-      startCountdown.seconds === 0
-    ));
+  const answeredCount = Object.keys(answers).filter(id => answers[id]).length;
+  const canStartExam = Boolean(assessment?.canStartAssessment || assessment?.assessmentStatus === "Started") || isDemoMode;
 
-  const score = useMemo(
-    () => questions.reduce((total, question) => total + (answers[question.id] === question.answer ? 20 : 0), 0),
-    [answers],
-  );
-
-  const submitNow = useCallback(async (reason?: string) => {
-    if (hasSubmittedRef.current) {
-      return;
+  // ── Camera Management ────────────────────────────────────────────────────────
+  const stopCamera = useCallback(() => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
     }
+    setCameraStatus("idle");
+  }, [cameraStream]);
 
-    hasSubmittedRef.current = true;
-    setIsSubmitting(true);
-
-    if (reason) {
-      setProctorViolation(reason);
-      setMessage(`${reason} Your assessment is being submitted.`);
-    } else {
-      setMessage("");
-    }
-
+  const requestCamera = useCallback(async (): Promise<MediaStream | null> => {
+    setCameraStatus("requesting");
     try {
-      const response = await submitAssessment(score, answers);
-      const isQualified = Boolean(response.data.isAptitudeQualified || response.data.result === "Qualified");
-      const nextRound = response.data.nextRound;
-
-      // Automatically transition to Coding Round without requiring another button click
-      if (isQualified && nextRound === "Coding") {
-        navigate(`/coding/${driveId}`, { state: { fromAptitude: true } });
-        return;
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setCameraStatus("unavailable");
+        return null;
       }
-
-      setCompletionResult({
-        score: response.data.score ?? score,
-        isAptitudeQualified: isQualified,
-        nextRound,
-      });
-      setMessage(response.data.message || `Aptitude Assessment Completed. Score: ${score}.`);
-    } catch {
-      hasSubmittedRef.current = false;
-      setMessage("Could not submit assessment. Please try again.");
-    } finally {
-      setIsSubmitting(false);
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      setCameraStream(stream);
+      setCameraStatus("active");
+      return stream;
+    } catch (err: unknown) {
+      if (err instanceof DOMException && (err.name === "NotAllowedError" || err.name === "PermissionDeniedError")) {
+        setCameraStatus("denied");
+      } else {
+        setCameraStatus("unavailable");
+      }
+      return null;
     }
-  }, [answers, navigate, score, driveId]);
+  }, []);
 
-  const addViolation = useCallback(async (type: string, message: string, metadata?: Record<string, unknown>) => {
-    const currentState = { violationCount: violationCountRef.current, autoSubmitted: isAutoSubmitted };
-    const result = evaluateViolationState(currentState, {
-      type,
-      message,
-      severity: "high",
-      metadata,
-    }, DEFAULT_PROCTORING_CONFIG);
-
-    violationCountRef.current = result.violationCount;
-    setViolationCount(result.violationCount);
-    setProctoringViolations((current) => [
-      ...current,
-      { id: Date.now(), type, message, timestamp: new Date().toISOString() },
-    ]);
-    setProctoringWarning(message);
-    setProctorViolation(message);
-
-    try {
-      await logProctoringEvent({
-        eventType: type,
-        severity: "high",
-        message,
-        metadata,
-        occurredAt: new Date().toISOString(),
-      });
-    } catch {
-      // Swallow logging failures so the assessment continues gracefully.
-    }
-
-    if (result.shouldAutoSubmit && !hasSubmittedRef.current) {
-      setIsAutoSubmitted(true);
-      await submitNow(`Assessment terminated due to policy violation: ${message}`);
-    }
-  }, [isAutoSubmitted, submitNow]);
-
-  useEffect(() => {
-    getAssessment(driveId)
-      .then((response) => {
-        setAssessment(response.data);
-        setAnswers(response.data.answers || {});
-        setHasStartedExam(response.data.assessmentStatus === "Started");
-        setIsDemoMode(Boolean(typeof window !== "undefined" && !window.localStorage.getItem("synthora-token")));
-      })
-      .catch(() => {
-        setMessage("Unable to load assessment. Please open your invitation link again.");
-        setIsDemoMode(true);
-      });
-  }, [driveId]);
-
+  // Attach stream to video element
   useEffect(() => {
     if (videoRef.current && cameraStream && videoRef.current.srcObject !== cameraStream) {
       videoRef.current.srcObject = cameraStream;
@@ -205,560 +153,704 @@ export default function Assessment() {
     }
   }, [cameraStream]);
 
-  useEffect(() => {
-    const handleFullscreenState = () => setIsFullscreen(Boolean(document.fullscreenElement));
-
-    document.addEventListener("fullscreenchange", handleFullscreenState);
-    return () => document.removeEventListener("fullscreenchange", handleFullscreenState);
-  }, []);
-
+  // Stop camera on unmount
   useEffect(() => {
     return () => {
-      cameraStream?.getTracks().forEach((track) => track.stop());
+      cameraStream?.getTracks().forEach(track => track.stop());
     };
   }, [cameraStream]);
 
+  // ── Fullscreen ───────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!hasStartedExam || !proctorReady) {
+    const handler = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", handler);
+    return () => document.removeEventListener("fullscreenchange", handler);
+  }, []);
+
+  // ── Load Assessment Data ─────────────────────────────────────────────────────
+  useEffect(() => {
+    getAssessment(driveId)
+      .then((response) => {
+        const data = response.data;
+        setAssessment(data);
+        setAnswers(data.answers || {});
+
+        if (data.assessmentStatus === "Completed") {
+          hasSubmittedRef.current = true;
+          setCompletionResult({
+            score: data.aptitudeScore ?? data.score ?? 0,
+            maxScore: 100,
+            isAptitudeQualified: data.result !== "Rejected",
+            nextRound: null,
+          });
+          return;
+        }
+
+        if (data.assessmentStatus === "Started") {
+          setHasStartedExam(true);
+          // Use server-provided deadline
+          const deadline = (data as AssessmentData & { aptitudeExpiresAt?: string }).aptitudeExpiresAt
+            || (data.startedAt
+              ? new Date(new Date(data.startedAt).getTime() + Number(data.durationMinutes) * 60 * 1000).toISOString()
+              : null);
+          if (deadline) {
+            setAptitudeExpiresAt(deadline);
+          }
+        }
+      })
+      .catch(() => {
+        setMessage("Unable to load assessment. Please open your invitation link again.");
+      });
+  }, [driveId]);
+
+  // ── Load Questions ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!hasStartedExam || questions.length > 0) return;
+    setLoadingQuestions(true);
+    fetchAptitudeQuestions(driveId)
+      .then(setQuestions)
+      .finally(() => setLoadingQuestions(false));
+  }, [hasStartedExam, driveId, questions.length]);
+
+  // ── Server-Authoritative Timer ───────────────────────────────────────────────
+  useEffect(() => {
+    if (!aptitudeExpiresAt || !hasStartedExam) return;
+
+    const tick = () => {
+      const remaining = new Date(aptitudeExpiresAt).getTime() - Date.now();
+      setTimeRemainingMs(remaining);
+
+      if (remaining <= 5 * 60 * 1000 && remaining > 0) {
+        setShowWarning(true);
+      }
+
+      if (remaining <= 0 && !hasSubmittedRef.current) {
+        // Time expired — auto-submit
+        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+        void handleAutoSubmit();
+      }
+    };
+
+    tick(); // immediate first tick
+    timerIntervalRef.current = setInterval(tick, 1000);
+    return () => {
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    };
+  }, [aptitudeExpiresAt, hasStartedExam]);
+
+  // ── Proctoring arm ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!hasStartedExam) {
       setIsProctorArmed(false);
       return;
     }
-
     const timeout = window.setTimeout(() => setIsProctorArmed(true), 3000);
     return () => window.clearTimeout(timeout);
-  }, [hasStartedExam, proctorReady]);
+  }, [hasStartedExam]);
 
+  // ── Tab / fullscreen violations ──────────────────────────────────────────────
   useEffect(() => {
-    if (!assessment || !hasStartedExam) {
-      return;
-    }
+    if (!hasStartedExam || !isProctorArmed) return;
 
-    const timeout = window.setTimeout(() => {
-      saveAssessmentAnswers(driveId, answers).catch(() => undefined);
-    }, 600);
-
-    return () => window.clearTimeout(timeout);
-  }, [answers, assessment, driveId]);
-
-  const handleProctorViolation = useCallback((reason: string, details?: { eventType?: string; metadata?: Record<string, unknown> }) => {
-    if (!hasStartedExam || !proctorReady || !isProctorArmed || hasSubmittedRef.current) {
-      return;
-    }
-
-    void addViolation(details?.eventType ?? "policy", reason, details?.metadata);
-    setMessage(`${reason} This incident has been logged.`);
-  }, [addViolation, hasStartedExam, isProctorArmed, proctorReady]);
-
-  const { warning: faceWarning } = useFaceDetection({
-    stream: cameraStream,
-    isEnabled: hasStartedExam && isFullscreen && isProctorArmed,
-    onFaceMissing: () => {
-      void addViolation("face", "Face not detected. Please stay within camera view.", { source: "face-detection" });
-    },
-  });
-
-  const { warning: deviceWarning } = useDeviceDetection({
-    stream: cameraStream,
-    isEnabled: hasStartedExam && isFullscreen && isProctorArmed,
-    onDeviceDetected: () => {
-      void addViolation("device", "Malpractice detected: external device found. This incident has been logged.", { source: "device-detection" });
-    },
-  });
-
-  useTabFocusMonitor({
-    isActive: hasStartedExam && isFullscreen && isProctorArmed,
-    onViolation: handleProctorViolation,
-  });
-
-  useEffect(() => {
-    if (!hasStartedExam || !proctorReady || !isProctorArmed) {
-      return;
-    }
-
-    const warningMessage = [faceWarning, deviceWarning].filter(Boolean).join(" ");
-    if (warningMessage) {
-      setProctoringWarning(warningMessage);
-      setMessage(warningMessage);
-    }
-  }, [deviceWarning, faceWarning, hasStartedExam, isProctorArmed, proctorReady]);
-
-  useEffect(() => {
-    if (!copyPasteToast) {
-      return;
-    }
-
-    const timeout = window.setTimeout(() => setCopyPasteToast(null), 2200);
-    return () => window.clearTimeout(timeout);
-  }, [copyPasteToast]);
-
-  useEffect(() => {
-    if (!hasStartedExam || !proctorReady || !isProctorArmed) {
-      return;
-    }
+    const handleVisibility = () => {
+      if (document.hidden) addViolation("tab-switch", "Tab switch detected during assessment.");
+    };
 
     const handleFullscreenChange = () => {
       if (!document.fullscreenElement) {
-        handleProctorViolation("Fullscreen mode was exited.");
-      }
-    };
-    const handleContextMenu = (event: MouseEvent) => event.preventDefault();
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    const handleCopyPaste = (event: KeyboardEvent) => {
-      const shortcutPressed = (event.ctrlKey || event.metaKey) && (event.key === "c" || event.key === "v" || event.key === "x");
-      if (shortcutPressed) {
-        event.preventDefault();
-        setCopyPasteToast("Copy-paste is disabled during this assessment.");
-        void logProctoringEvent({
-          eventType: "copy-paste",
-          severity: "medium",
-          message: "Copy-paste attempt blocked",
-          metadata: { key: event.key, source: "keyboard-shortcut" },
-          occurredAt: new Date().toISOString(),
-        }).catch(() => undefined);
+        addViolation("fullscreen", "Fullscreen mode exited during assessment.");
       }
     };
 
-    const handleScreenshotCapture = (event: KeyboardEvent) => {
-      if (!isScreenshotShortcut(event)) {
-        return;
-      }
-
-      event.preventDefault();
-      void handleProctorViolation("Screenshot capture is not allowed during this assessment.", {
-        eventType: "screenshot",
-        metadata: { key: event.key, code: event.code, source: "keyboard-shortcut" },
-      });
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
     };
 
+    const handleKeydown = (e: KeyboardEvent) => {
+      // Block copy-paste
+      if ((e.ctrlKey || e.metaKey) && ["c", "v", "x"].includes(e.key)) {
+        e.preventDefault();
+        addViolation("copy-paste", "Copy-paste blocked during assessment.");
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
     document.addEventListener("fullscreenchange", handleFullscreenChange);
-    document.addEventListener("contextmenu", handleContextMenu);
-    document.addEventListener("keydown", handleCopyPaste);
-    document.addEventListener("keydown", handleScreenshotCapture);
+    document.addEventListener("keydown", handleKeydown);
     window.addEventListener("beforeunload", handleBeforeUnload);
 
     return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
-      document.removeEventListener("contextmenu", handleContextMenu);
-      document.removeEventListener("keydown", handleCopyPaste);
-      document.removeEventListener("keydown", handleScreenshotCapture);
+      document.removeEventListener("keydown", handleKeydown);
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
-  }, [handleProctorViolation, hasStartedExam, isProctorArmed, proctorReady]);
+  }, [hasStartedExam, isProctorArmed]);
 
+  function addViolation(type: string, msg: string) {
+    setProctoringViolations(prev => [...prev, { id: Date.now(), type, message: msg, timestamp: new Date().toISOString() }]);
+    logProctoringEvent({ eventType: type, severity: "medium", message: msg, metadata: {}, occurredAt: new Date().toISOString() }).catch(() => undefined);
+  }
+
+  // ── Auto-save answers ────────────────────────────────────────────────────────
   useEffect(() => {
-    const timeIsOver =
-      hasStartedExam &&
-      examEndAt &&
-      Date.now() >= new Date(examEndAt).getTime();
+    if (!hasStartedExam) return;
+    if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current);
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      saveAssessmentAnswers(driveId, answers).catch(() => undefined);
+    }, 800);
+    return () => {
+      if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current);
+    };
+  }, [answers, hasStartedExam, driveId]);
 
-    if (timeIsOver) {
-      void submitNow("Time is over.");
-    }
-  }, [examCountdown, examEndAt, hasStartedExam, submitNow]);
+  // ── Submit logic ─────────────────────────────────────────────────────────────
+  const submitNow = useCallback(async (reason?: string) => {
+    if (hasSubmittedRef.current) return;
+    hasSubmittedRef.current = true;
+    setIsSubmitting(true);
 
-  const handleStartExam = async () => {
-    setMessage("");
-    setProctorViolation("");
-    setProctoringWarning(null);
-    setHasPermissionError(false);
-    setIsSecuringExam(true);
-
-    let stream: MediaStream | null = null;
+    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    stopCamera();
 
     try {
-      if (navigator.mediaDevices?.getUserMedia) {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-          setCameraStream(stream);
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-            void videoRef.current.play().catch(() => undefined);
-          }
-          setIsMicReady(true);
-          setIsCameraReady(true);
-        } catch {
-          if (!isDemoMode) {
-            setMessage("Camera and microphone access are required before the assessment can begin.");
-            return;
-          }
-          setMessage("Camera access was not granted, so the assessment will continue in demo mode.");
-        }
+      // Save latest answers first
+      await saveAssessmentAnswers(driveId, answers).catch(() => undefined);
+
+      // Submit — backend calculates score server-side
+      const response = await submitAssessment(0, answers);
+      const isQualified = Boolean(response.data.isAptitudeQualified || response.data.result === "Qualified");
+      const nextRound = response.data.nextRound;
+
+      setCompletionResult({
+        score: response.data.score ?? 0,
+        maxScore: response.data.maxScore ?? 100,
+        isAptitudeQualified: isQualified,
+        nextRound,
+        message: reason ? `Assessment auto-submitted: ${reason}` : response.data.message,
+      });
+    } catch {
+      hasSubmittedRef.current = false;
+      setIsSubmitting(false);
+      setMessage("Could not submit assessment. Please try again.");
+    }
+  }, [answers, driveId, isDemoMode, stopCamera]);
+
+  const handleAutoSubmit = useCallback(() => {
+    return submitNow("Time limit reached");
+  }, [submitNow]);
+
+  // ── Start exam ───────────────────────────────────────────────────────────────
+  const handleStartExam = async () => {
+    setMessage("");
+    setIsSecuringExam(true);
+
+    try {
+      const stream = await requestCamera();
+      if (!stream && !isDemoMode) {
+        setMessage("Camera and microphone access are required before starting this proctored assessment. Please allow browser permissions and try again.");
+        setIsSecuringExam(false);
+        return;
       }
 
+      // Enter fullscreen
       if (!document.fullscreenElement) {
-        try {
-          await document.documentElement.requestFullscreen();
-        } catch {
-          setMessage("Fullscreen mode is recommended so the proctoring checks can run properly.");
-        }
+        await document.documentElement.requestFullscreen().catch(() => undefined);
       }
       setIsFullscreen(true);
 
+      // Start on backend
+      const startResponse = await startAssessmentForDrive(driveId);
+      const deadline = (startResponse.data as { aptitudeExpiresAt?: string }).aptitudeExpiresAt;
+
+      // Reload assessment to get authoritative data
+      const assessmentResponse = await getAssessment(driveId);
+      setAssessment(assessmentResponse.data);
+      setAnswers(assessmentResponse.data.answers || {});
+
+      const serverDeadline = deadline
+        || (assessmentResponse.data as AssessmentData & { aptitudeExpiresAt?: string }).aptitudeExpiresAt
+        || (assessmentResponse.data.startedAt
+          ? new Date(new Date(assessmentResponse.data.startedAt).getTime() + Number(assessmentResponse.data.durationMinutes) * 60 * 1000).toISOString()
+          : new Date(Date.now() + Number(assessmentResponse.data.durationMinutes) * 60 * 1000).toISOString());
+
+      setAptitudeExpiresAt(serverDeadline);
       setHasStartedExam(true);
 
-      if (isDemoMode) {
-        setIsMicReady(true);
-        setIsCameraReady(Boolean(stream));
-        void startAssessmentForDrive(driveId).catch(() => undefined);
-        try {
-          const response = await getAssessment(driveId);
-          setAssessment(response.data);
-        } catch {
-          setMessage("Assessment started locally. Backend sync may be delayed.");
-        }
-        return;
-      }
-
-      void startAssessmentForDrive(driveId).catch(() => undefined);
-      try {
-        const response = await getAssessment(driveId);
-        setAssessment(response.data);
-      } catch {
-        setMessage("Assessment started locally. Backend sync may be delayed.");
-      }
-    } catch (error) {
-      const activeStream = stream as MediaStream | null;
-      activeStream?.getTracks?.().forEach((track: MediaStreamTrack) => track.stop());
-      setCameraStream(null);
-      setIsMicReady(false);
-      setIsCameraReady(false);
-
-      if (error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "PermissionDeniedError")) {
-        setHasPermissionError(true);
-        setMessage("Microphone and camera access are required before the assessment can begin.");
-        return;
-      }
-
-      setMessage("The assessment can only start during the official exam window and requires camera, microphone, and fullscreen access.");
+    } catch (err: unknown) {
+      const errMessage = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setMessage(errMessage || "Unable to start assessment. Please check your internet connection and try again.");
     } finally {
       setIsSecuringExam(false);
     }
   };
 
-  const handleSubmit = async () => {
-    await submitNow();
-  };
+  // ── Render states ────────────────────────────────────────────────────────────
 
-  if (isAutoSubmitted && hasSubmittedRef.current) {
+  // Submission success screen
+  if (completionResult) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-950 px-5 py-10 text-white">
-        <div className="w-full max-w-xl rounded-3xl border border-rose-400/30 bg-white/10 p-8 text-center shadow-2xl shadow-rose-950/40">
-          <p className="text-sm font-extrabold uppercase tracking-[0.24em] text-rose-300">Assessment terminated</p>
-          <h1 className="mt-3 text-3xl font-extrabold">Test submitted due to policy violation</h1>
-          <p className="mt-4 text-sm leading-7 text-slate-300">
-            Your assessment was automatically submitted because a proctoring violation was recorded. Please contact the administrator if you believe this was a mistake.
-          </p>
+      <main className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 flex items-center justify-center px-4">
+        <div className="w-full max-w-xl">
+          <div className="rounded-3xl border border-emerald-400/20 bg-slate-800/80 backdrop-blur-xl p-10 text-center shadow-2xl shadow-emerald-900/30">
+            <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/15 ring-4 ring-emerald-500/20">
+              <CheckCircle2 className="h-10 w-10 text-emerald-400" />
+            </div>
+
+            <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-emerald-400">
+              Assessment Submitted
+            </p>
+            <h1 className="mt-3 text-3xl font-black text-white leading-tight">
+              Assessment Submitted Successfully!
+            </h1>
+            <p className="mt-4 text-sm text-slate-300 leading-7">
+              Your responses have been submitted successfully. You may now close this window.
+            </p>
+
+            {completionResult.message && (
+              <div className="mt-5 rounded-xl border border-slate-600/40 bg-slate-700/50 px-5 py-4 text-left">
+                <p className="text-sm text-slate-300">{completionResult.message}</p>
+              </div>
+            )}
+
+            <div className="mt-6 flex flex-col gap-3">
+              {completionResult.isAptitudeQualified && completionResult.nextRound === "Coding" ? (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/coding/${driveId}`, { state: { fromAptitude: true } })}
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-6 text-sm font-extrabold text-white transition hover:bg-emerald-400"
+                >
+                  Proceed to Coding Round
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => navigate("/")}
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-slate-600 px-6 text-sm font-bold text-slate-200 transition hover:bg-slate-700"
+              >
+                <Home className="h-4 w-4" />
+                Go to Dashboard
+              </button>
+            </div>
+          </div>
         </div>
       </main>
     );
   }
 
-  return (
-    <main className="min-h-screen bg-slate-50 px-5 py-6 font-inter text-slate-950 dark:bg-slate-950 dark:text-white sm:px-8">
-      <header className="mx-auto flex max-w-6xl items-center justify-between">
-        <a href="/" className="flex items-center gap-3">
-          <img src={logo} alt="" className="h-10 w-10" />
-          <span className="text-xl font-extrabold">Synthora.AI</span>
-        </a>
-        <ThemeToggle />
-      </header>
+  // ── Pre-exam waiting room ────────────────────────────────────────────────────
+  if (!hasStartedExam) {
+    return (
+      <main className="min-h-screen bg-slate-50 dark:bg-slate-950 px-5 py-6">
+        <header className="mx-auto flex max-w-5xl items-center justify-between">
+          <a href="/" className="flex items-center gap-3">
+            <img src={logo} alt="Synthora" className="h-10 w-10" />
+            <span className="text-xl font-extrabold text-slate-900 dark:text-white">Synthora.AI</span>
+          </a>
+        </header>
 
-      <section className="mx-auto mt-8 grid max-w-6xl gap-6 lg:grid-cols-[0.72fr_1.28fr]">
-        <aside className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/10">
-          <p className="text-xs font-extrabold uppercase text-sky-600 dark:text-sky-300">{assessment?.currentRound ? `${assessment.currentRound} Assessment` : "Aptitude Assessment"}</p>
-          <h1 className="mt-2 text-2xl font-extrabold text-slate-950 dark:text-white">{assessment?.driveName ?? "Assessment"}</h1>
-          <div className="mt-5 grid gap-3 text-sm">
-            <Info label="Student Name" value={assessment?.studentName ?? "-"} />
-            <Info label="Company" value={assessment?.companyName ?? "-"} />
-            <Info label="Drive Name" value={assessment?.driveName ?? "-"} />
-          </div>
-
-          <div className="mt-5 rounded-2xl bg-slate-950 p-4 text-white dark:bg-white dark:text-slate-950">
-            <p className="flex items-center gap-2 text-xs font-extrabold uppercase text-sky-300 dark:text-sky-700">
-              <Clock3 className="h-4 w-4" />
-              {hasStartedExam ? "Assessment Timer" : "Countdown Timer"}
+        <div className="mx-auto mt-10 max-w-2xl">
+          <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-white/10 dark:bg-white/5">
+            <p className="text-xs font-extrabold uppercase tracking-widest text-sky-600 dark:text-sky-400">
+              {assessment?.currentRound || "Aptitude"} Assessment
             </p>
-            <div className="mt-3 grid grid-cols-4 gap-2 text-center">
-              <TimeBlock label="D" value={activeCountdown.days} />
-              <TimeBlock label="H" value={activeCountdown.hours} />
-              <TimeBlock label="M" value={activeCountdown.minutes} />
-              <TimeBlock label="S" value={activeCountdown.seconds} />
+            <h1 className="mt-2 text-3xl font-black text-slate-900 dark:text-white">
+              {assessment?.driveName || "Assessment"}
+            </h1>
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <InfoCard label="Company" value={assessment?.companyName || "-"} />
+              <InfoCard label="Candidate" value={assessment?.studentName || "-"} />
+              <InfoCard label="Duration" value={assessment ? `${assessment.durationMinutes} minutes` : "-"} />
+              <InfoCard label="Round" value={assessment?.currentRound || "Aptitude"} />
             </div>
-          </div>
 
-          {hasStartedExam ? (
-            <div className="mt-5 overflow-hidden rounded-2xl border border-emerald-200 bg-emerald-50 dark:border-emerald-400/20 dark:bg-emerald-400/10">
-              {cameraStream ? (
-                <video ref={videoRef} autoPlay muted playsInline className="aspect-video w-full bg-slate-950 object-cover" />
-              ) : (
-                <div className="flex aspect-video items-center justify-center bg-slate-950 px-4 text-center text-sm font-semibold text-slate-200">
-                  Camera preview will appear once browser access is granted.
-                </div>
-              )}
-              <p className="flex items-center gap-2 px-4 py-3 text-xs font-extrabold uppercase text-emerald-700 dark:text-emerald-200">
-                <Camera className="h-4 w-4" />
-                {cameraStream ? "Camera Monitoring Active" : "Camera preview pending"}
-              </p>
+            {!canStartExam && assessment && (
+              <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
+                <Clock3 className="inline h-4 w-4 mr-1.5" />
+                Assessment window has not opened yet. Please wait.
+              </div>
+            )}
+
+            {message && (
+              <div className="mt-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700 dark:border-rose-400/20 dark:bg-rose-400/10 dark:text-rose-300">
+                <AlertTriangle className="inline h-4 w-4 mr-1.5" />
+                {message}
+              </div>
+            )}
+
+            <div className="mt-6 rounded-xl border border-slate-100 bg-slate-50 p-4 dark:border-white/5 dark:bg-white/5">
+              <p className="text-xs font-extrabold uppercase text-slate-500 dark:text-slate-400">Instructions</p>
+              <ul className="mt-3 space-y-2 text-sm text-slate-700 dark:text-slate-300">
+                <li>• Camera and microphone access required for proctoring.</li>
+                <li>• Assessment will run in fullscreen mode.</li>
+                <li>• Timer starts when you click "Start Assessment".</li>
+                <li>• Do not switch tabs or exit fullscreen.</li>
+                <li>• Assessment auto-submits when time expires.</li>
+              </ul>
             </div>
-          ) : null}
 
-          <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">
-            <p className="text-xs font-extrabold uppercase text-slate-500 dark:text-slate-400">Rules</p>
-            <ul className="mt-3 space-y-2 text-sm text-slate-700 dark:text-slate-200">
-              <li>Stable Internet Connection</li>
-              <li>Camera must remain ON</li>
-              <li>Microphone access is required</li>
-              <li>Fullscreen mode is required</li>
-              <li>Do not refresh page or switch tabs</li>
-              <li>Screenshot attempts are monitored</li>
-              <li>Timer cannot be paused</li>
-            </ul>
-          </div>
-        </aside>
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/10">
-          {message ? (
-            <p className={`mb-4 rounded-xl px-4 py-3 text-sm font-bold ${proctorViolation
-                ? "bg-rose-50 text-rose-700 dark:bg-rose-400/10 dark:text-rose-200"
-                : "bg-sky-50 text-sky-700 dark:bg-sky-400/10 dark:text-sky-200"
-              }`}>
-              {message}
-            </p>
-          ) : null}
-
-          {!hasStartedExam ? (
-            <div className="grid gap-4">
-              {isDemoMode ? (
-                <div className="mb-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-semibold text-sky-700 dark:border-sky-400/20 dark:bg-sky-400/10 dark:text-sky-200">
-                  Demo mode is active. The assessment is running locally so proctoring features can be tested without a student session.
-                </div>
-              ) : null}
-
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-white/10 dark:bg-white/5">
-                <p className="text-xs font-extrabold uppercase text-slate-500 dark:text-slate-400">Waiting Room</p>
-                <h2 className="mt-2 text-2xl font-extrabold text-slate-950 dark:text-white">{assessment?.driveName ?? "Assessment"}</h2>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <Info label="Company" value={assessment?.companyName ?? "-"} />
-                  <Info label="Candidate Name" value={assessment?.studentName ?? "-"} />
-                  <Info label="Round" value={assessment?.currentRound ? assessment.currentRound.toUpperCase() : "APTITUDE"} />
-                  <Info label="Exam Time" value={`${assessment?.examDate ?? "-"} ${assessment?.examTime ?? ""}`} />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-bold text-slate-600 dark:text-slate-300">
-                  {canStartExam ? "Allow camera access and fullscreen to begin." : `Assessment starts in ${formatCountdown(startCountdown)}`}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setShowPrepModal(true)}
-                  disabled={!canStartExam || isSecuringExam}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 text-sm font-extrabold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-sky-400 dark:text-slate-950"
-                >
-                  {isSecuringExam ? <Maximize2 className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
-                  {isSecuringExam ? "Securing..." : "Start Proctored Assessment"}
-                </button>
-              </div>
-            </div>
-          ) : !proctorReady ? (
-            <div className="grid gap-4">
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-400/20 dark:bg-amber-400/10">
-                <p className="flex items-center gap-2 text-xs font-extrabold uppercase text-amber-700 dark:text-amber-200">
-                  <AlertTriangle className="h-4 w-4" />
-                  Proctoring Required
-                </p>
-                <h2 className="mt-2 text-2xl font-extrabold text-slate-950 dark:text-white">Secure mode is not active</h2>
-                <p className="mt-2 text-sm font-bold text-slate-700 dark:text-slate-200">
-                  Camera, microphone, and fullscreen mode are required before questions are shown.
-                </p>
-              </div>
-
+            <div className="mt-6 flex justify-end">
               <button
                 type="button"
                 onClick={() => setShowPrepModal(true)}
-                disabled={isSecuringExam}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 text-sm font-extrabold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-sky-400 dark:text-slate-950"
+                disabled={!canStartExam || isSecuringExam}
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-slate-900 px-7 text-sm font-extrabold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-sky-500 dark:hover:bg-sky-400"
               >
-                <ShieldCheck className="h-4 w-4" />
-                {isSecuringExam ? "Securing..." : "Enable Camera & Fullscreen"}
+                <ShieldCheck className="h-5 w-5" />
+                {isSecuringExam ? "Starting..." : "Start Proctored Assessment"}
               </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Prep Modal */}
+        {showPrepModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-3xl border border-sky-400/20 bg-slate-900 p-8 text-white shadow-2xl">
+              <h3 className="text-2xl font-extrabold">Ready to begin?</h3>
+              <p className="mt-3 text-sm leading-7 text-slate-300">
+                Clicking "Start" will:
+              </p>
+              <ul className="mt-3 space-y-1.5 text-sm text-slate-300">
+                <li>• Request camera and microphone access</li>
+                <li>• Enter fullscreen mode</li>
+                <li>• Start the {assessment?.durationMinutes}-minute countdown</li>
+              </ul>
+              <div className="mt-8 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowPrepModal(false)}
+                  className="flex-1 h-11 rounded-xl border border-white/15 text-sm font-bold text-slate-200 transition hover:bg-white/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowPrepModal(false); void handleStartExam(); }}
+                  disabled={isSecuringExam}
+                  className="flex-1 h-11 rounded-xl bg-sky-500 text-sm font-extrabold text-white transition hover:bg-sky-400 disabled:opacity-60"
+                >
+                  {isSecuringExam ? "Starting..." : "I'm Ready — Start"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+    );
+  }
+
+  // ── Active exam interface ────────────────────────────────────────────────────
+  const timerWarning = timeRemainingMs !== null && timeRemainingMs <= 5 * 60 * 1000 && timeRemainingMs > 0;
+  const timerCritical = timeRemainingMs !== null && timeRemainingMs <= 60 * 1000 && timeRemainingMs > 0;
+
+  return (
+    <main className="min-h-screen bg-slate-950 text-white flex flex-col">
+      {/* ── Top Bar ──────────────────────────────────────────────────────────── */}
+      <header className="flex h-14 items-center justify-between border-b border-slate-800 px-5">
+        <div className="flex items-center gap-3">
+          <img src={logo} alt="Synthora" className="h-8 w-8" />
+          <span className="text-sm font-extrabold text-white hidden sm:block">
+            {assessment?.driveName || "Assessment"}
+          </span>
+        </div>
+
+        {/* Timer */}
+        <div className={`flex items-center gap-2 rounded-xl px-4 py-2 font-mono text-lg font-black tabular-nums transition-colors ${
+          timerCritical ? "bg-rose-500/20 text-rose-400 ring-1 ring-rose-400/40" :
+          timerWarning ? "bg-amber-500/20 text-amber-400 ring-1 ring-amber-400/40" :
+          "bg-slate-800 text-white"
+        }`}>
+          <Clock3 className="h-4 w-4 shrink-0" />
+          {timeRemainingMs !== null ? formatTimer(timeRemainingMs) : "--:--"}
+        </div>
+
+        <div className="flex items-center gap-3 text-sm">
+          <span className="hidden sm:block text-slate-400 font-semibold">
+            {answeredCount}/{questions.length} answered
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowSubmitConfirm(true)}
+            disabled={isSubmitting}
+            className="h-9 rounded-xl bg-sky-500 px-4 text-sm font-extrabold text-white transition hover:bg-sky-400 disabled:opacity-60"
+          >
+            {isSubmitting ? "Submitting..." : "Submit"}
+          </button>
+        </div>
+      </header>
+
+      {/* ── Warning Banner ───────────────────────────────────────────────────── */}
+      {showWarning && (
+        <div className={`flex items-center gap-3 px-5 py-2.5 text-sm font-bold ${
+          timerCritical ? "bg-rose-600/90 text-white" : "bg-amber-500/90 text-slate-900"
+        }`}>
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          {timerCritical
+            ? "Less than 1 minute remaining. Assessment will auto-submit soon."
+            : "Warning: Less than 5 minutes remaining. Please review and submit your answers."
+          }
+        </div>
+      )}
+
+      {/* ── Main Content ─────────────────────────────────────────────────────── */}
+      <div className="flex flex-1 overflow-hidden">
+
+        {/* ── Left sidebar ─────────────────────────────────────────────────── */}
+        <aside className="hidden lg:flex w-64 shrink-0 flex-col border-r border-slate-800 bg-slate-900 p-4 overflow-y-auto">
+          {/* Camera Preview */}
+          <div className="rounded-xl overflow-hidden border border-slate-700">
+            {cameraStatus === "active" && cameraStream ? (
+              <video ref={videoRef} autoPlay muted playsInline className="aspect-video w-full bg-slate-950 object-cover" />
+            ) : (
+              <div className="aspect-video flex flex-col items-center justify-center bg-slate-800 gap-2">
+                {cameraStatus === "denied" && <CameraOff className="h-8 w-8 text-rose-400" />}
+                {cameraStatus === "unavailable" && <CameraOff className="h-8 w-8 text-amber-400" />}
+                {cameraStatus === "idle" && <Camera className="h-8 w-8 text-slate-500" />}
+                <p className="text-xs text-slate-400 px-3 text-center">
+                  {cameraStatus === "denied" ? "Camera access denied" :
+                   cameraStatus === "unavailable" ? "Camera unavailable" :
+                   "Camera not active"}
+                </p>
+              </div>
+            )}
+            <p className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold ${
+              cameraStatus === "active" ? "text-emerald-400" :
+              cameraStatus === "denied" ? "text-rose-400" : "text-slate-400"
+            }`}>
+              {cameraStatus === "active" ? <Camera className="h-3.5 w-3.5" /> : <CameraOff className="h-3.5 w-3.5" />}
+              {cameraStatus === "active" ? "Camera Active" :
+               cameraStatus === "denied" ? "Camera Denied" :
+               cameraStatus === "unavailable" ? "Camera Unavailable" : "Camera Off"}
+            </p>
+          </div>
+
+          {/* Question Palette */}
+          <div className="mt-5">
+            <p className="text-xs font-extrabold uppercase text-slate-500 mb-3">Question Palette</p>
+            <div className="grid grid-cols-5 gap-1.5">
+              {questions.map((q, idx) => (
+                <button
+                  key={q.id}
+                  type="button"
+                  onClick={() => setCurrentIndex(idx)}
+                  className={`h-9 w-full rounded-lg text-xs font-extrabold transition ${
+                    idx === currentIndex
+                      ? "bg-sky-500 text-white ring-2 ring-sky-400/50"
+                      : answers[q.id]
+                        ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                        : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+                  }`}
+                >
+                  {idx + 1}
+                </button>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-col gap-1.5 text-xs text-slate-400">
+              <div className="flex items-center gap-2"><span className="inline-block h-3 w-3 rounded-sm bg-emerald-500/20 border border-emerald-500/40" /> Answered</div>
+              <div className="flex items-center gap-2"><span className="inline-block h-3 w-3 rounded-sm bg-slate-800" /> Not answered</div>
+              <div className="flex items-center gap-2"><span className="inline-block h-3 w-3 rounded-sm bg-sky-500" /> Current</div>
+            </div>
+          </div>
+
+          {/* Proctoring violations summary */}
+          {proctoringViolations.length > 0 && (
+            <div className="mt-5 rounded-xl border border-rose-400/20 bg-rose-400/5 p-3">
+              <p className="text-xs font-bold text-rose-400">Violations: {proctoringViolations.length}</p>
+            </div>
+          )}
+        </aside>
+
+        {/* ── Question Panel ───────────────────────────────────────────────── */}
+        <section className="flex-1 overflow-y-auto p-6 lg:p-8">
+          {message && (
+            <div className="mb-4 rounded-xl border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm font-bold text-rose-300">
+              <AlertTriangle className="inline h-4 w-4 mr-1.5" />
+              {message}
+            </div>
+          )}
+
+          {loadingQuestions ? (
+            <div className="flex items-center justify-center h-40 text-slate-400">
+              Loading questions...
+            </div>
+          ) : !currentQuestion ? (
+            <div className="flex items-center justify-center h-40 text-slate-400">
+              No questions available.
             </div>
           ) : (
             <>
-              {proctorViolation ? (
-                <div className="mb-5 flex items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-extrabold text-rose-700 dark:border-rose-400/20 dark:bg-rose-400/10 dark:text-rose-200">
-                  <AlertTriangle className="h-5 w-5" />
-                  {proctorViolation}
-                </div>
-              ) : null}
-
-              <ProctoringGuard
-                isActive={hasStartedExam && proctorReady}
-                isMicReady={isMicReady}
-                isCameraReady={isCameraReady}
-                hasPermissionError={hasPermissionError}
-                violationCount={violationCount}
-                warningMessage={proctoringWarning}
-              >
-                <div className="mb-4">
-                  <ProctoringReport title="Live proctoring report" violations={proctoringViolations} />
-                </div>
-                {copyPasteToast ? (
-                  <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
-                    {copyPasteToast}
-                  </div>
-                ) : null}
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-extrabold text-slate-500 dark:text-slate-400">
+              {/* Question header */}
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <p className="text-xs font-extrabold uppercase text-sky-400 tracking-wider">
                     Question {currentIndex + 1} of {questions.length}
                   </p>
-                  <p className="text-sm font-bold text-slate-500 dark:text-slate-400">{Object.keys(answers).length}/{questions.length} answered</p>
-                </div>
-
-                <h2 className="mt-4 text-xl font-extrabold text-slate-950 dark:text-white">{currentQuestion.question}</h2>
-
-                <div className="mt-5 grid gap-3 select-none" onCopyCapture={(event) => { event.preventDefault(); setCopyPasteToast("Copy-paste is disabled during this assessment."); void logProctoringEvent({ eventType: "copy-paste", severity: "medium", message: "Copy attempt blocked", metadata: { source: "copy-capture" }, occurredAt: new Date().toISOString() }).catch(() => undefined); }} onCutCapture={(event) => { event.preventDefault(); setCopyPasteToast("Copy-paste is disabled during this assessment."); void logProctoringEvent({ eventType: "copy-paste", severity: "medium", message: "Cut attempt blocked", metadata: { source: "cut-capture" }, occurredAt: new Date().toISOString() }).catch(() => undefined); }} onPasteCapture={(event) => { event.preventDefault(); setCopyPasteToast("Copy-paste is disabled during this assessment."); void logProctoringEvent({ eventType: "copy-paste", severity: "medium", message: "Paste attempt blocked", metadata: { source: "paste-capture" }, occurredAt: new Date().toISOString() }).catch(() => undefined); }} onContextMenuCapture={(event) => { event.preventDefault(); setCopyPasteToast("Copy-paste is disabled during this assessment."); void logProctoringEvent({ eventType: "copy-paste", severity: "medium", message: "Context menu blocked", metadata: { source: "context-menu" }, occurredAt: new Date().toISOString() }).catch(() => undefined); }}>
-                  {currentQuestion.options.map((option) => {
-                    const selected = answers[currentQuestion.id] === option;
-
-                    return (
-                      <button
-                        key={option}
-                        type="button"
-                        onClick={() => setAnswers((current) => ({ ...current, [currentQuestion.id]: option }))}
-                        className={`flex min-h-12 items-center justify-between rounded-xl border px-4 text-left text-sm font-bold transition ${selected
-                            ? "border-sky-400 bg-sky-50 text-sky-700 dark:bg-sky-400/10 dark:text-sky-200"
-                            : "border-slate-200 bg-slate-50 text-slate-700 hover:border-sky-300 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
-                          }`}
-                      >
-                        {option}
-                        {selected ? <CheckCircle2 className="h-5 w-5" /> : null}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <button
-                    type="button"
-                    disabled={currentIndex === 0 || isSubmitting}
-                    onClick={() => setCurrentIndex((index) => Math.max(index - 1, 0))}
-                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                    Previous
-                  </button>
-
-                  {currentIndex === questions.length - 1 ? (
-                    <button
-                      type="button"
-                      disabled={isSubmitting}
-                      onClick={handleSubmit}
-                      className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-950 px-5 text-sm font-extrabold text-white transition hover:bg-slate-800 disabled:opacity-60 dark:bg-sky-400 dark:text-slate-950"
-                    >
-                      {isSubmitting ? "Submitting..." : "Submit Assessment"}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setCurrentIndex((index) => Math.min(index + 1, questions.length - 1))}
-                      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 text-sm font-extrabold text-white transition hover:bg-slate-800 dark:bg-sky-400 dark:text-slate-950"
-                    >
-                      Next
-                      <ArrowRight className="h-4 w-4" />
-                    </button>
+                  {currentQuestion.category && (
+                    <p className="mt-0.5 text-xs text-slate-500">{currentQuestion.category}</p>
                   )}
                 </div>
-              </ProctoringGuard>
+                <span className="text-xs text-slate-500 font-semibold">
+                  {currentQuestion.marks} mark{currentQuestion.marks !== 1 ? "s" : ""}
+                </span>
+              </div>
+
+              {/* Question text */}
+              <h2 className="text-lg font-bold text-white leading-8 select-none">
+                {currentQuestion.question}
+              </h2>
+
+              {/* Options */}
+              <div className="mt-6 grid gap-3 select-none"
+                onCopyCapture={e => e.preventDefault()}
+                onCutCapture={e => e.preventDefault()}
+                onPasteCapture={e => e.preventDefault()}
+                onContextMenuCapture={e => e.preventDefault()}
+              >
+                {currentQuestion.options.map((option, optIdx) => {
+                  const selected = answers[currentQuestion.id] === option;
+                  const letters = ["A", "B", "C", "D", "E"];
+                  return (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setAnswers(prev => ({ ...prev, [currentQuestion.id]: option }))}
+                      className={`flex items-center gap-4 rounded-xl border px-5 py-4 text-left text-sm font-semibold transition ${
+                        selected
+                          ? "border-sky-500 bg-sky-500/15 text-sky-300 ring-1 ring-sky-500/30"
+                          : "border-slate-700 bg-slate-800 text-slate-200 hover:border-slate-500 hover:bg-slate-700/70"
+                      }`}
+                    >
+                      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-black ${
+                        selected ? "bg-sky-500 text-white" : "bg-slate-700 text-slate-400"
+                      }`}>
+                        {letters[optIdx] || optIdx + 1}
+                      </span>
+                      {option}
+                      {selected && <CheckCircle2 className="ml-auto h-5 w-5 text-sky-400 shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Clear answer */}
+              {answers[currentQuestion.id] && (
+                <button
+                  type="button"
+                  onClick={() => setAnswers(prev => { const next = { ...prev }; delete next[currentQuestion.id]; return next; })}
+                  className="mt-3 text-xs font-semibold text-slate-500 hover:text-rose-400 transition"
+                >
+                  <XCircle className="inline h-3.5 w-3.5 mr-1" />
+                  Clear answer
+                </button>
+              )}
+
+              {/* Navigation */}
+              <div className="mt-8 flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  disabled={currentIndex === 0}
+                  onClick={() => setCurrentIndex(i => Math.max(i - 1, 0))}
+                  className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-700 px-5 text-sm font-bold text-slate-300 transition hover:bg-slate-800 disabled:opacity-40"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Previous
+                </button>
+
+                {currentIndex === questions.length - 1 ? (
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => setShowSubmitConfirm(true)}
+                    className="inline-flex h-11 items-center gap-2 rounded-xl bg-sky-500 px-6 text-sm font-extrabold text-white transition hover:bg-sky-400 disabled:opacity-60"
+                  >
+                    {isSubmitting ? "Submitting..." : "Submit Assessment"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setCurrentIndex(i => Math.min(i + 1, questions.length - 1))}
+                    className="inline-flex h-11 items-center gap-2 rounded-xl bg-slate-700 px-5 text-sm font-bold text-white transition hover:bg-slate-600"
+                  >
+                    Next
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Mobile question palette */}
+              <div className="mt-8 lg:hidden">
+                <p className="text-xs font-extrabold uppercase text-slate-500 mb-3">Questions</p>
+                <div className="flex flex-wrap gap-2">
+                  {questions.map((q, idx) => (
+                    <button
+                      key={q.id}
+                      type="button"
+                      onClick={() => setCurrentIndex(idx)}
+                      className={`h-9 w-9 rounded-lg text-xs font-extrabold transition ${
+                        idx === currentIndex ? "bg-sky-500 text-white" :
+                        answers[q.id] ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40" :
+                        "bg-slate-800 text-slate-400"
+                      }`}
+                    >
+                      {idx + 1}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </>
           )}
         </section>
-      </section>
+      </div>
 
-      {showPrepModal ? (
-        <div className="fixed inset-0 z-20 flex items-center justify-center bg-slate-950/80 px-4">
-          <div className="w-full max-w-lg rounded-3xl border border-sky-400/20 bg-slate-900 p-6 text-white shadow-2xl shadow-sky-950/40">
-            <p className="text-xs font-extrabold uppercase tracking-[0.24em] text-sky-300">Before you begin</p>
-            <h3 className="mt-3 text-2xl font-extrabold">Close other applications and keep this tab active</h3>
-            <p className="mt-3 text-sm leading-7 text-slate-300">
-              The assessment will monitor your browser focus, microphone, and camera throughout the exam. Please leave any other apps or tabs closed and continue only when you are ready.
+      {/* ── Submit Confirmation Modal ────────────────────────────────────────── */}
+      {showSubmitConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-7 text-white shadow-2xl">
+            <h3 className="text-xl font-extrabold">Submit Assessment?</h3>
+            <p className="mt-3 text-sm text-slate-300 leading-6">
+              You have answered <strong className="text-white">{answeredCount}</strong> of{" "}
+              <strong className="text-white">{questions.length}</strong> questions.
+              {answeredCount < questions.length && (
+                <span className="text-amber-400"> {questions.length - answeredCount} question(s) unanswered.</span>
+              )}
             </p>
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
+            <p className="mt-2 text-sm text-slate-400">
+              Once submitted, you cannot change your answers.
+            </p>
+            <div className="mt-6 flex gap-3">
               <button
                 type="button"
-                onClick={() => setShowPrepModal(false)}
-                className="inline-flex h-11 items-center justify-center rounded-xl border border-white/15 px-4 text-sm font-bold text-slate-200 transition hover:bg-white/10"
+                onClick={() => setShowSubmitConfirm(false)}
+                className="flex-1 h-11 rounded-xl border border-slate-600 text-sm font-bold text-slate-200 transition hover:bg-slate-800"
               >
-                Cancel
+                Review Answers
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setShowPrepModal(false);
-                  void handleStartExam();
-                }}
-                className="inline-flex h-11 items-center justify-center rounded-xl bg-sky-500 px-5 text-sm font-extrabold text-slate-950 transition hover:bg-sky-400"
+                disabled={isSubmitting}
+                onClick={() => { setShowSubmitConfirm(false); void submitNow(); }}
+                className="flex-1 h-11 rounded-xl bg-sky-500 text-sm font-extrabold text-white transition hover:bg-sky-400 disabled:opacity-60"
               >
-                I’m ready to begin
+                {isSubmitting ? "Submitting..." : "Yes, Submit"}
               </button>
             </div>
           </div>
         </div>
-      ) : null}
-
-      {completionResult ? (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-950/85 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-3xl border border-sky-400/30 bg-slate-900 p-8 text-white shadow-2xl shadow-sky-950/50 text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-400 mb-4">
-              <CheckCircle2 className="h-8 w-8 text-sky-400" />
-            </div>
-            <p className="text-xs font-extrabold uppercase tracking-[0.24em] text-sky-300">Aptitude Assessment Completed</p>
-            <h3 className="mt-2 text-2xl font-black">Your result has been submitted</h3>
-            <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 text-left">
-              <p className="text-sm font-semibold text-slate-300">Your score: <span className="font-black text-white">{completionResult.score}/100</span></p>
-              <p className="mt-2 text-sm font-semibold text-slate-300">
-                Result: <span className={completionResult.isAptitudeQualified ? "font-black text-emerald-300" : "font-black text-rose-300"}>
-                  {completionResult.isAptitudeQualified ? "Cleared" : "Not Cleared"}
-                </span>
-              </p>
-            </div>
-            <p className="mt-4 text-sm leading-6 text-slate-300">
-              {completionResult.isAptitudeQualified
-                ? "Your responses have been submitted successfully. Please check your registered email for updates regarding the next stage of the selection process."
-                : "Your responses have been submitted. You did not meet the required cutoff for this assessment. Best wishes for future opportunities."}
-            </p>
-          </div>
-        </div>
-      ) : null}
+      )}
     </main>
   );
 }
 
-function Info({ label, value }: { label: string; value: string }) {
+// ── Sub-components ─────────────────────────────────────────────────────────────
+function InfoCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl bg-slate-50 p-3 dark:bg-white/5">
+    <div className="rounded-xl bg-slate-50 dark:bg-white/5 p-3">
       <p className="text-xs font-extrabold uppercase text-slate-500 dark:text-slate-400">{label}</p>
-      <p className="mt-1 font-bold text-slate-950 dark:text-white">{value}</p>
+      <p className="mt-1 text-sm font-bold text-slate-900 dark:text-white">{value}</p>
     </div>
   );
-}
-
-function TimeBlock({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-xl bg-white/10 p-2 dark:bg-slate-950/10">
-      <p className="text-xl font-extrabold tabular-nums">{String(value).padStart(2, "0")}</p>
-      <p className="text-[11px] font-bold opacity-70">{label}</p>
-    </div>
-  );
-}
-
-function formatCountdown(value: { days: number; hours: number; minutes: number; seconds: number }) {
-  if (value.days > 0) {
-    return `${String(value.days).padStart(2, "0")}:${String(value.hours).padStart(2, "0")}:${String(value.minutes).padStart(2, "0")}:${String(value.seconds).padStart(2, "0")}`;
-  }
-
-  return `${String(value.hours).padStart(2, "0")}:${String(value.minutes).padStart(2, "0")}:${String(value.seconds).padStart(2, "0")}`;
 }

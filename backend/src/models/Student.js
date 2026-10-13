@@ -76,6 +76,8 @@ const studentSchema = new mongoose.Schema(
     aptitudeStartedAt: { type: Date },
     aptitudeExpiresAt: { type: Date },
     codingScore: { type: Number, default: null },
+    codingAnswers: { type: mongoose.Schema.Types.Mixed, default: [] },
+    codingDrafts: { type: mongoose.Schema.Types.Mixed, default: {} },
     codingStatus: {
       type: String,
       enum: ["Not Selected", "Active", "In Progress", "Completed", "Expired"],

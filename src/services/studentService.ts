@@ -86,6 +86,8 @@ export type AssessmentData = {
   examEndTime?: string;
   durationMinutes: number;
   assessmentStatus: string;
+  result?: string;
+  score?: number | null;
   startedAt?: string;
   examStartAt: string;
   examEndAt?: string;
@@ -108,6 +110,7 @@ export type AssessmentData = {
   technicalAssessmentAccessExpiresAt?: string;
   currentRound?: string;
   roundResults?: RoundResult[];
+  aptitudeExpiresAt?: string;
 };
 
 export async function getStudentDashboard() {
@@ -162,6 +165,8 @@ export interface SubmitAssessmentResponse {
   message?: string;
   result: string;
   score: number;
+  maxScore?: number;
+  percentage?: number;
   completedAt: string;
   isAptitudeQualified?: boolean;
   qualifiedForOral?: boolean;
@@ -170,10 +175,11 @@ export interface SubmitAssessmentResponse {
 
 export async function submitAssessment(score: number, answers: Record<string, string>) {
   try {
-    return await api.post<SubmitAssessmentResponse>("/students/assessment/complete", { score, answers });
+    // Note: score parameter is kept for API compatibility but server calculates it authoritatively
+    return await api.post<SubmitAssessmentResponse>("/students/assessment/complete", { answers });
   } catch (error) {
     if (isFallbackError(error)) {
-      return { data: { result: score >= 60 ? "Pending" : "Rejected", score, completedAt: new Date().toISOString(), qualifiedForOral: false } } as { data: SubmitAssessmentResponse };
+      return { data: { result: "Pending", score: 0, completedAt: new Date().toISOString(), qualifiedForOral: false } } as { data: SubmitAssessmentResponse };
     }
 
     throw error;

@@ -224,22 +224,43 @@ export async function evaluateSpokenAnswer({
     return buildFallbackEvaluation(question, trimmedAnswer, category);
   }
 
-  const systemPrompt = `You are Synthora AI, an expert technical evaluator. Evaluate the candidate's spoken viva answer objectively against the role and question.
-Role: ${jobRole}
-Hiring drive context: ${jobDescription || "No additional job description text was provided."}
-Question Category: ${category}
-Question: ${question}
+  const systemPrompt = `You are Synthora AI, a senior technical interviewer and objective evaluator. Your job is to assess a candidate's spoken viva answer for the following interview context.
 
-Return your evaluation in strict JSON format with exactly these fields:
+Role: ${jobRole}
+Hiring Context: ${jobDescription || "General software engineering role."}
+Question Category: ${category}
+Question Asked: ${question}
+
+SCORING RUBRIC (score each metric from 0–10):
+- technicalAccuracy (0-10): Is the technical content correct? 0=completely wrong, 5=partially correct with errors, 10=fully accurate
+- conceptualKnowledge (0-10): Does the candidate show deep understanding? 0=no understanding, 5=surface-level, 10=expert-level insight  
+- communicationSkill (0-10): Is the answer clearly expressed? 0=incomprehensible, 5=understandable but unclear, 10=concise and precise
+- completeness (0-10): Does the answer cover all key aspects? 0=misses everything, 5=covers basics, 10=comprehensive coverage
+- relevance (0-10): Does the answer directly address the question? 0=completely off-topic, 5=partially relevant, 10=directly on-topic
+
+OVERALL SCORE FORMULA: Weighted average — technicalAccuracy×0.3 + conceptualKnowledge×0.25 + communicationSkill×0.15 + completeness×0.2 + relevance×0.1
+
+EVALUATION STANDARDS:
+- Score 8-10: Answer demonstrates expert understanding with accurate details and clear explanation
+- Score 6-7: Answer is correct at core level with minor gaps or unclear phrasing  
+- Score 4-5: Answer partially addresses the question or has notable technical inaccuracies
+- Score 2-3: Answer shows some awareness but is mostly incorrect or irrelevant
+- Score 0-1: No meaningful answer, completely wrong, or irrelevant response
+
+For CODING questions: evaluate logical correctness, edge case handling, and understanding of the algorithmic approach — not just code syntax.
+
+isSatisfactory: true only if score >= 6 AND technicalAccuracy >= 5 AND relevance >= 5
+
+Return ONLY valid JSON in exactly this format (no markdown, no extra text):
 {
-  "score": <integer from 0 to 10>,
-  "technicalAccuracy": <integer from 0 to 10>,
-  "conceptualKnowledge": <integer from 0 to 10>,
-  "communicationSkill": <integer from 0 to 10>,
-  "completeness": <integer from 0 to 10>,
-  "relevance": <integer from 0 to 10>,
-  "feedback": "<1-2 sentences of clear, constructive feedback on the response>",
-  "isSatisfactory": <true if score >= 6 else false>
+  "score": <integer 0-10>,
+  "technicalAccuracy": <integer 0-10>,
+  "conceptualKnowledge": <integer 0-10>,
+  "communicationSkill": <integer 0-10>,
+  "completeness": <integer 0-10>,
+  "relevance": <integer 0-10>,
+  "feedback": "<1-2 sentences of specific, constructive feedback citing what was correct and what was missing>",
+  "isSatisfactory": <true|false>
 }`;
 
   try {
@@ -248,7 +269,7 @@ Return your evaluation in strict JSON format with exactly these fields:
         { role: "system", content: systemPrompt },
         { role: "user", content: `Candidate's Spoken Answer:\n"${trimmedAnswer}"` },
       ],
-      temperature: 0.2,
+      temperature: 0.15,
       response_format: { type: "json_object" },
     });
 
@@ -256,15 +277,24 @@ Return your evaluation in strict JSON format with exactly these fields:
     const parsed = JSON.parse(content);
     const score = clampMetric(parsed.score);
 
+    // Recalculate overall score using weighted formula if the model gave component scores
+    const tA = clampMetric(parsed.technicalAccuracy);
+    const cK = clampMetric(parsed.conceptualKnowledge);
+    const cS = clampMetric(parsed.communicationSkill);
+    const co = clampMetric(parsed.completeness);
+    const re = clampMetric(parsed.relevance);
+    const weightedScore = Math.round(tA * 0.3 + cK * 0.25 + cS * 0.15 + co * 0.2 + re * 0.1);
+    const finalScore = score > 0 ? Math.round((score + weightedScore) / 2) : weightedScore;
+
     return {
-      score,
-      technicalAccuracy: clampMetric(parsed.technicalAccuracy),
-      conceptualKnowledge: clampMetric(parsed.conceptualKnowledge),
-      communicationSkill: clampMetric(parsed.communicationSkill),
-      completeness: clampMetric(parsed.completeness),
-      relevance: clampMetric(parsed.relevance),
+      score: clampMetric(finalScore),
+      technicalAccuracy: tA,
+      conceptualKnowledge: cK,
+      communicationSkill: cS,
+      completeness: co,
+      relevance: re,
       feedback: typeof parsed.feedback === "string" ? parsed.feedback : "Answer evaluated.",
-      isSatisfactory: typeof parsed.isSatisfactory === "boolean" ? parsed.isSatisfactory : score >= 6,
+      isSatisfactory: tA >= 5 && re >= 5 && finalScore >= 6,
     };
   } catch (error) {
     console.error("[Synthora AI] Groq evaluation error:", error.message);

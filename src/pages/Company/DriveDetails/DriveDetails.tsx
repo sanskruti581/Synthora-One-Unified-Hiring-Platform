@@ -286,79 +286,156 @@ export default function DriveDetails() {
           </div>
 
           <div className="mt-5 overflow-x-auto rounded-xl border border-synthora-border">
-            <table className="min-w-[1280px] w-full text-left text-sm">
+            <table className="min-w-[1500px] w-full text-left text-sm">
               <thead className="bg-blue-50/80 text-xs uppercase text-synthora-muted">
                 <tr>
-                  {["Student Name", "Email", "Current Round", "Assessment Status", "Aptitude Score", "Coding Score", "Technical Score", "Technical Status", "Final Result", "Actions / Viva"].map((heading) => (
-                    <th key={heading} className="px-4 py-3 font-extrabold">
-                      {heading}
-                    </th>
-                  ))}
+                  <th className="px-4 py-3 font-extrabold">Student</th>
+                  <th className="px-4 py-3 font-extrabold">Submission</th>
+                  <th className="px-4 py-3 font-extrabold">Started At</th>
+                  <th className="px-4 py-3 font-extrabold">Submitted At</th>
+                  <th className="px-4 py-3 font-extrabold">Time Spent</th>
+                  <th className="px-4 py-3 font-extrabold">Aptitude Score</th>
+                  <th className="px-4 py-3 font-extrabold">Aptitude %</th>
+                  <th className="px-4 py-3 font-extrabold">Cutoff</th>
+                  <th className="px-4 py-3 font-extrabold">Apt. Result</th>
+                  <th className="px-4 py-3 font-extrabold">Coding Score</th>
+                  <th className="px-4 py-3 font-extrabold">Oral Score</th>
+                  <th className="px-4 py-3 font-extrabold">Final Result</th>
+                  <th className="px-4 py-3 font-extrabold">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-synthora-border bg-white">
                 {visibleStudents.map((student) => (
                   <tr key={student._id} className="transition hover:bg-blue-50/50">
-                    <td className="px-4 py-3 font-bold text-synthora-text">{student.studentName || "Student"}</td>
-                    <td className="px-4 py-3 text-synthora-muted">{student.email}</td>
+                    {/* Student info */}
                     <td className="px-4 py-3">
-                      <span className="inline-block rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-extrabold text-synthora-blue">
+                      <p className="font-bold text-synthora-text">{student.studentName || "Student"}</p>
+                      <p className="text-xs text-synthora-muted mt-0.5">{student.email}</p>
+                      <span className="inline-block mt-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-extrabold text-synthora-blue">
                         {student.currentRound ?? "Aptitude"}
                       </span>
                     </td>
-                    <td className="px-4 py-3">{student.assessmentStatus}</td>
-                    <td className="px-4 py-3 font-bold">{student.aptitudeScore ?? student.score ?? "-"}</td>
-                    <td className="px-4 py-3 font-bold text-indigo-600">{student.codingScore !== null && student.codingScore !== undefined ? student.codingScore : "-"}</td>
-                    <td className="px-4 py-3 font-bold text-sky-600">
-                      {student.technicalOralScore !== null && student.technicalOralScore !== undefined
-                        ? `${student.technicalOralScore}/100`
-                        : "-"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-extrabold ${getTechnicalStatusClass(student.technicalAssessmentStatus)}`}>
-                        {student.technicalAssessmentStatus ?? "Not Selected"}
-                      </span>
-                      {student.technicalAssessmentEmailSent ? (
-                        <p className="mt-1 text-[11px] font-semibold text-emerald-600">Email sent</p>
-                      ) : student.technicalAssessmentEmailStatus && student.technicalAssessmentStatus !== "Not Selected" ? (
-                        <p className="mt-1 text-[11px] font-semibold text-slate-500">{student.technicalAssessmentEmailStatus}</p>
-                      ) : null}
-                    </td>
+
+                    {/* Submission status */}
                     <td className="px-4 py-3">
                       <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-extrabold ${
-                        student.result === "Qualified"
-                          ? "bg-emerald-50 text-emerald-600"
-                          : student.result === "Rejected"
-                            ? "bg-rose-50 text-rose-600"
-                            : "bg-slate-100 text-slate-600"
+                        student.submissionStatus === "Submitted" ? "bg-emerald-50 text-emerald-700" :
+                        student.submissionStatus === "In Progress" ? "bg-amber-50 text-amber-700" :
+                        "bg-slate-100 text-slate-500"
+                      }`}>
+                        {student.submissionStatus ?? student.assessmentStatus}
+                      </span>
+                    </td>
+
+                    {/* Started at */}
+                    <td className="px-4 py-3 text-xs text-synthora-muted">
+                      {student.startedAt ? formatDateTime(student.startedAt) : "-"}
+                    </td>
+
+                    {/* Submitted at */}
+                    <td className="px-4 py-3 text-xs text-synthora-muted">
+                      {student.completedAt ? formatDateTime(student.completedAt) : "-"}
+                    </td>
+
+                    {/* Time spent */}
+                    <td className="px-4 py-3 text-xs font-semibold text-synthora-text">
+                      {student.timeSpentMinutes != null ? `${student.timeSpentMinutes} min` : "-"}
+                    </td>
+
+                    {/* Aptitude score: marks obtained / total */}
+                    <td className="px-4 py-3">
+                      {student.aptitudeScore != null ? (
+                        <span className="font-bold text-synthora-text">
+                          {student.aptitudeScore}
+                          {student.aptitudeMaxScore != null ? <span className="text-synthora-muted font-normal">/{student.aptitudeMaxScore}</span> : null}
+                        </span>
+                      ) : student.assessmentStatus === "Completed" ? (
+                        <span className="text-synthora-muted">0</span>
+                      ) : "-"}
+                    </td>
+
+                    {/* Aptitude percentage */}
+                    <td className="px-4 py-3">
+                      {student.aptitudePercentage != null ? (
+                        <span className={`font-extrabold ${
+                          student.aptitudePassed ? "text-emerald-600" : "text-rose-600"
+                        }`}>
+                          {student.aptitudePercentage}%
+                        </span>
+                      ) : "-"}
+                    </td>
+
+                    {/* Cutoff threshold */}
+                    <td className="px-4 py-3 text-xs font-semibold text-synthora-muted">
+                      {student.aptitudeCutoff != null ? `${student.aptitudeCutoff}` : drive?.aptitudeCutoff ?? "-"}
+                    </td>
+
+                    {/* Aptitude pass/fail */}
+                    <td className="px-4 py-3">
+                      {student.aptitudePassed === true ? (
+                        <span className="inline-block rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-extrabold text-emerald-700">Passed</span>
+                      ) : student.aptitudePassed === false ? (
+                        <span className="inline-block rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-extrabold text-rose-700">Failed</span>
+                      ) : "-"}
+                    </td>
+
+                    {/* Coding score */}
+                    <td className="px-4 py-3 font-bold text-indigo-600">
+                      {student.codingScore != null ? student.codingScore : "-"}
+                    </td>
+
+                    {/* Technical oral score */}
+                    <td className="px-4 py-3">
+                      {student.technicalOralScore != null ? (
+                        <div>
+                          <span className="font-bold text-sky-600">{student.technicalOralScore}/100</span>
+                          <span className={`ml-1.5 text-[10px] font-extrabold ${
+                            student.technicalOralPassed ? "text-emerald-600" : "text-rose-600"
+                          }`}>
+                            {student.technicalOralPassed ? "✓ Pass" : "✗ Fail"}
+                          </span>
+                        </div>
+                      ) : "-"}
+                    </td>
+
+                    {/* Final result */}
+                    <td className="px-4 py-3">
+                      <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-extrabold ${
+                        student.result === "Qualified" ? "bg-emerald-50 text-emerald-600" :
+                        student.result === "Rejected" ? "bg-rose-50 text-rose-600" :
+                        "bg-slate-100 text-slate-600"
                       }`}>
                         {student.result}
                       </span>
                     </td>
-                    <td className="px-4 py-3 flex items-center gap-2">
-                      {canSelectForTechnical(student, drive?.rounds) ? (
-                        <button
-                          type="button"
-                          onClick={() => handleTechnicalInvite(student)}
-                          disabled={invitingStudentId === student._id}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60"
-                        >
-                          <UserCheck className="h-3.5 w-3.5" />
-                          {invitingStudentId === student._id ? "Selecting..." : "Select for Technical"}
-                        </button>
-                      ) : null}
-                      {student.technicalOralScore !== null && student.technicalOralScore !== undefined ? (
-                        <button
-                          type="button"
-                          onClick={() => setSelectedStudentForOral({ id: student._id, name: student.studentName || student.email })}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-700 hover:bg-sky-100 transition shadow-sm"
-                        >
-                          <MessageSquare className="h-3.5 w-3.5" />
-                          View Viva
-                        </button>
-                      ) : !canSelectForTechnical(student, drive?.rounds) ? (
-                        <span className="text-xs text-slate-400">{getTechnicalActionText(student, drive?.rounds)}</span>
-                      ) : null}
+
+                    {/* Actions */}
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col gap-1.5">
+                        {canSelectForTechnical(student, drive?.rounds) ? (
+                          <button
+                            type="button"
+                            onClick={() => handleTechnicalInvite(student)}
+                            disabled={invitingStudentId === student._id}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60"
+                          >
+                            <UserCheck className="h-3.5 w-3.5" />
+                            {invitingStudentId === student._id ? "Selecting..." : "Select for Technical"}
+                          </button>
+                        ) : null}
+                        {student.technicalOralScore !== null && student.technicalOralScore !== undefined ? (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedStudentForOral({ id: student._id, name: student.studentName || student.email })}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-700 hover:bg-sky-100 transition shadow-sm"
+                          >
+                            <MessageSquare className="h-3.5 w-3.5" />
+                            View Viva
+                          </button>
+                        ) : !canSelectForTechnical(student, drive?.rounds) ? (
+                          <span className="text-xs text-slate-400">{getTechnicalActionText(student, drive?.rounds)}</span>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -610,4 +687,12 @@ function ActionButton({ label, icon: Icon, onClick }: { label: string; icon: Luc
 
 function formatDate(value?: string) {
   return value ? new Date(value).toLocaleString() : "-";
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return "-";
+  const d = new Date(value);
+  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) +
+    " " +
+    d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
 }

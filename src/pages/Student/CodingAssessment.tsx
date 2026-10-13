@@ -31,6 +31,7 @@ import {
   getCodingAssessment,
   getCodingQuestions,
   runCode,
+  saveCodingDraft,
   submitCodingRound,
   type CodingQuestion,
   type CodingAssessmentData,
@@ -156,6 +157,7 @@ export default function CodingAssessment() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hasSubmittedRef = useRef(false);
   const violationCountRef = useRef(0);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Multi-Language Editor States
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
@@ -207,9 +209,11 @@ export default function CodingAssessment() {
         return;
       }
 
+      let loadedAssessment: CodingAssessmentData;
       try {
         const assessmentRes = await getCodingAssessment(driveId);
-        setAssessmentData(assessmentRes.data);
+        loadedAssessment = assessmentRes.data;
+        setAssessmentData(loadedAssessment);
       } catch {
         setError("Failed to load coding assessment. Please check your session or contact support.");
         setLoading(false);
@@ -232,7 +236,13 @@ export default function CodingAssessment() {
           const initialLanguages: Record<string, LanguageKey> = {};
           const initialCodes: Record<string, Record<string, string>> = {};
 
+          const savedByQuestion = new Map<string, { questionId: string; language: string; sourceCode: string }>(
+            (loadedAssessment.savedSolutions || []).map((solution) => [solution.questionId, solution])
+          );
+
           fetchedQuestions.forEach((q) => {
+            const saved = savedByQuestion.get(q._id);
+            const savedLanguage = (saved?.language || "javascript") as LanguageKey;
             initialLanguages[q._id] = "javascript";
             initialCodes[q._id] = {
               javascript: getStarterCode(q, "javascript"),
@@ -241,6 +251,10 @@ export default function CodingAssessment() {
               c: getStarterCode(q, "c"),
               cpp: getStarterCode(q, "cpp"),
             };
+            if (saved && SUPPORTED_LANGUAGES.some((lang) => lang.value === savedLanguage)) {
+              initialLanguages[q._id] = savedLanguage;
+              initialCodes[q._id][savedLanguage] = saved.sourceCode;
+            }
           });
 
           setSelectedLanguages(initialLanguages);
@@ -294,6 +308,7 @@ export default function CodingAssessment() {
               sourceCode: code,
             };
           }),
+          autoSubmitted: Boolean(reason),
         };
         const response = await submitCodingRound(payload);
         const isQualified = response.data.result !== "Rejected";
@@ -322,6 +337,27 @@ export default function CodingAssessment() {
       void submitNow("Time is over.");
     }
   }, [countdown, timerEndAt, hasStartedExam, submitNow]);
+
+  useEffect(() => {
+    if (!hasStartedExam || !driveId || questions.length === 0 || hasSubmittedRef.current) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+
+    autoSaveTimerRef.current = setTimeout(() => {
+      const solutions = questions.map((q) => {
+        const lang = selectedLanguages[q._id] || "javascript";
+        return {
+          questionId: q._id,
+          language: lang,
+          sourceCode: userCodes[q._id]?.[lang] || getStarterCode(q, lang),
+        };
+      });
+      saveCodingDraft({ driveId, solutions }).catch(() => undefined);
+    }, 1200);
+
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [driveId, hasStartedExam, questions, selectedLanguages, userCodes]);
 
   // Proctoring violation handler
   const addViolation = useCallback(

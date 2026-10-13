@@ -73,6 +73,20 @@ export function canAccessRound(drive, student, roundName) {
     }
 
     if (!isCompleted) return false;
+
+    const maxScore = prevResult?.maxScore || 100;
+    const rawScore = prevResult?.score ?? (
+      prevRound === "Aptitude" ? (student.aptitudeScore ?? student.score) :
+      prevRound === "Coding" ? student.codingScore :
+      prevRound === "Technical Oral" ? student.technicalOralScore : null
+    );
+
+    if (typeof rawScore === "number") {
+      const percentage = maxScore > 0 ? (rawScore / maxScore) * 100 : rawScore;
+      if (prevRound === "Aptitude" && percentage < Number(drive.aptitudeCutoff || 0)) return false;
+      if (prevRound === "Coding" && Number(drive.codingCutoff || 0) > 0 && rawScore < Number(drive.codingCutoff)) return false;
+      if (prevRound === "Technical Oral" && percentage < Number(drive.technicalOralCutoff ?? 60)) return false;
+    }
   }
   return true;
 }
@@ -132,7 +146,9 @@ export function calculateOverallScore(drive, student) {
 export function determineFinalResult(drive, student) {
   // Check aptitude cutoff
   const aptScore = student.aptitudeScore ?? student.score;
-  if (typeof aptScore === "number" && aptScore < Number(drive.aptitudeCutoff || 0)) {
+  const aptRound = (student.roundResults || []).find(r => normalizeRoundName(r.roundName) === "Aptitude");
+  const aptPercentage = typeof aptScore === "number" ? (aptScore / (aptRound?.maxScore || 100)) * 100 : null;
+  if (typeof aptPercentage === "number" && aptPercentage < Number(drive.aptitudeCutoff || 0)) {
     return "Rejected";
   }
 

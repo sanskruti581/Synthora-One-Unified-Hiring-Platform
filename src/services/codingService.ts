@@ -55,6 +55,8 @@ export type CodingAssessmentData = {
   startedAt?: string;
   examStartAt: string;
   examEndAt?: string;
+  codingExpiresAt?: string;
+  savedSolutions?: { questionId: string; language: string; sourceCode: string }[];
 };
 
 export async function getCodingAssessment(driveId: string) {
@@ -77,6 +79,14 @@ export async function runCode(data: {
 export async function submitCodingRound(data: {
   driveId: string;
   solutions: { questionId: string; language: string; sourceCode: string }[];
+  autoSubmitted?: boolean;
 }) {
   return api.post<SubmitCodeResponse>("/coding/submit", data);
+}
+
+export async function saveCodingDraft(data: {
+  driveId: string;
+  solutions: { questionId: string; language: string; sourceCode: string }[];
+}) {
+  return api.post<{ message: string; savedAt: string }>("/coding/save", data);
 }
