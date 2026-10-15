@@ -340,7 +340,7 @@ router.get("/invite/:token", async (req, res) => {
       redirectUrl: `/coding/${drive._id}`,
     });
   }
-  const examStartAt = getExamStartDate(drive.examDate, drive.examTime);
+  const examStartAt = getExamStartDate(drive.examDate, drive.examTime, drive.timeZone);
   const examEndAt = getExamEndDate(drive);
 
   // If exam window schedule extends into the future, revive any expired status
@@ -496,7 +496,7 @@ router.post("/invite/:token/start", async (req, res) => {
       loginWindowOpenAt: codingStartsAt,
     });
   }
-  const examStartAt = getExamStartDate(drive.examDate, drive.examTime);
+  const examStartAt = getExamStartDate(drive.examDate, drive.examTime, drive.timeZone);
   const examEndAt = getExamEndDate(drive);
 
   // If exam schedule was extended/updated and now < examEndAt, revive expired invitation
@@ -642,7 +642,7 @@ router.get("/me/dashboard", requireStudent, async (req, res) => {
     assessmentStatus: student.assessmentStatus,
     startedAt: student.startedAt,
     completedAt: student.completedAt,
-    examStartAt: getExamStartDate(drive.examDate, drive.examTime),
+    examStartAt: getExamStartDate(drive.examDate, drive.examTime, drive.timeZone),
     examEndAt: getExamEndDate(drive),
     currentRound: student.currentRound,
     score: student.score,
@@ -707,11 +707,11 @@ router.get("/assessment/:driveId", requireStudent, async (req, res) => {
     assessmentStatus: student.assessmentStatus,
     startedAt: student.startedAt,
     aptitudeExpiresAt,
-    examStartAt: getExamStartDate(drive.examDate, drive.examTime),
+    examStartAt: getExamStartDate(drive.examDate, drive.examTime, drive.timeZone),
     examEndAt,
     canStartAssessment:
       student.assessmentStatus !== "Completed" &&
-      now >= getExamStartDate(drive.examDate, drive.examTime) &&
+      now >= getExamStartDate(drive.examDate, drive.examTime, drive.timeZone) &&
       now < examEndAt &&
       (student.assessmentStatus === "Started" || examEndAt.getTime() - now.getTime() >= durationMs),
     answers: student.answers instanceof Map ? Object.fromEntries(student.answers) : (student.answers || {}),
@@ -792,7 +792,7 @@ router.post("/assessment/start", requireStudent, async (req, res) => {
   }
 
   const now = new Date();
-  const examStartAt = getExamStartDate(drive.examDate, drive.examTime);
+  const examStartAt = getExamStartDate(drive.examDate, drive.examTime, drive.timeZone);
   const examEndAt = getExamEndDate(drive);
 
   if (now < examStartAt) {
@@ -834,7 +834,7 @@ router.post("/assessment/:driveId/start", requireStudent, async (req, res) => {
   }
 
   const now = new Date();
-  const examStartAt = getExamStartDate(drive.examDate, drive.examTime);
+  const examStartAt = getExamStartDate(drive.examDate, drive.examTime, drive.timeZone);
   const examEndAt = getExamEndDate(drive);
   const durationMs = Number(drive.durationMinutes) * 60 * 1000;
 

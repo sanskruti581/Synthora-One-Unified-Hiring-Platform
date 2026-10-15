@@ -55,6 +55,7 @@ export default function CompanyDashboard() {
       const res = await updateDriveSchedule(activeDriveForSchedule._id, {
         examDate: editExamDate,
         examTime: editExamTime,
+        timeZone: activeDriveForSchedule.timeZone || "Asia/Kolkata",
         examEndTime: editExamEndTime || undefined,
         durationMinutes: Number(editDurationMinutes) || activeDriveForSchedule.durationMinutes,
         notifyStudents,

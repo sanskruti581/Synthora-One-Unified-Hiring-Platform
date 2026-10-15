@@ -19,6 +19,7 @@ const hiringDriveSchema = new mongoose.Schema(
     },
     examDate: { type: String, required: true },
     examTime: { type: String, required: true },
+    timeZone: { type: String, default: "Asia/Kolkata" },
     examEndTime: { type: String },
     examEndDate: { type: String },
     windowDurationHours: { type: Number, default: 6 },

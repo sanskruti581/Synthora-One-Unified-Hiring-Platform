@@ -34,25 +34,51 @@ export function normalizeTimeString(timeStr) {
   return trimmed;
 }
 
-export function getExamStartDate(examDate, examTime) {
+export function getExamStartDate(examDate, examTime, timeZone = "Asia/Kolkata") {
   const normTime = normalizeTimeString(examTime);
-  const parsed = new Date(`${examDate}T${normTime}:00`);
-  if (!isNaN(parsed.getTime())) {
-    return parsed;
+  const match = String(examDate || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const timeMatch = normTime.match(/^(\d{2}):(\d{2})$/);
+  if (!match || !timeMatch) return new Date(NaN);
+
+  const [, year, month, day] = match;
+  const [, hours, minutes] = timeMatch;
+  if (Number(hours) > 23 || Number(minutes) > 59) return new Date(NaN);
+  const targetUtc = Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hours), Number(minutes));
+  if (new Date(targetUtc).toISOString().slice(0, 10) !== examDate) return new Date(NaN);
+
+  try {
+    const formatter = new Intl.DateTimeFormat("en-GB", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
+    let timestamp = targetUtc;
+    // Resolve the wall-clock time in the configured zone without relying on the server's TZ.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const parts = Object.fromEntries(formatter.formatToParts(new Date(timestamp)).map(({ type, value }) => [type, value]));
+      const zonedAsUtc = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour), Number(parts.minute));
+      timestamp += targetUtc - zonedAsUtc;
+    }
+    return new Date(timestamp);
+  } catch {
+    return new Date(NaN);
   }
-  return new Date();
 }
 
 export function getExamEndDate(drive) {
   if (!drive) return new Date(Date.now() + 6 * 60 * 60 * 1000);
 
-  const start = getExamStartDate(drive.examDate, drive.examTime);
+  const start = getExamStartDate(drive.examDate, drive.examTime, drive.timeZone);
 
   // If company configured an explicit window end time
   if (drive.examEndTime && typeof drive.examEndTime === "string" && drive.examEndTime.trim()) {
     const normEndTime = normalizeTimeString(drive.examEndTime);
     const endDateStr = drive.examEndDate || drive.examDate;
-    let end = new Date(`${endDateStr}T${normEndTime}:00`);
+    let end = getExamStartDate(endDateStr, normEndTime, drive.timeZone);
 
     if (!isNaN(end.getTime())) {
       // If end time is before or equal to start time on the same date (e.g., start 22:00, end 02:00 next morning)

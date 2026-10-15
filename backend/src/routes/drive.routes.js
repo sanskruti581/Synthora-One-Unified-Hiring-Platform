@@ -17,20 +17,30 @@ import {
 import TechnicalOralInterview from "../models/TechnicalOralInterview.js";
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB per file limit to prevent server OOM and MongoDB 16MB document overflow
+  fileFilter: (_req, file, cb) => {
+    if (file.originalname.match(/\.(pdf|docx|doc|csv|xlsx|xls|txt)$/i)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Unsupported file type. Please upload a PDF, DOCX, CSV, or Excel spreadsheet."));
+    }
+  },
+});
 
-function getExplicitWindowEndDate(examDate, examEndTime) {
+function getExplicitWindowEndDate(examDate, examEndTime, timeZone) {
   const normalizedEndTime = normalizeTimeString(examEndTime);
-  return new Date(`${examDate}T${normalizedEndTime}:00`);
+  return getExamStartDate(examDate, normalizedEndTime, timeZone);
 }
 
-function validateAssessmentWindow({ examDate, examTime, examEndTime, durationMinutes }) {
+function validateAssessmentWindow({ examDate, examTime, examEndTime, durationMinutes, timeZone }) {
   if (!examDate || !examTime || !examEndTime) {
     return "Assessment date, starting window time, and ending window time are required.";
   }
 
-  const start = getExamStartDate(examDate, examTime);
-  const end = getExplicitWindowEndDate(examDate, examEndTime);
+  const start = getExamStartDate(examDate, examTime, timeZone);
+  const end = getExplicitWindowEndDate(examDate, examEndTime, timeZone);
   const duration = Number(durationMinutes);
 
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
@@ -190,6 +200,7 @@ router.post(
         examTime: req.body.examTime,
         examEndTime: req.body.examEndTime,
         durationMinutes: req.body.durationMinutes,
+        timeZone: req.body.timeZone || "Asia/Kolkata",
       });
       if (scheduleError) {
         return res.status(400).json({ message: scheduleError });
@@ -229,6 +240,7 @@ router.post(
         studentFile: { originalName: studentFile.originalname, mimeType: studentFile.mimetype, size: studentFile.size, data: studentFile.buffer },
         examDate: req.body.examDate,
         examTime: req.body.examTime,
+        timeZone: req.body.timeZone || "Asia/Kolkata",
         examEndTime: String(req.body.examEndTime).trim(),
         durationMinutes: Number(req.body.durationMinutes),
         rounds: parsedRounds,
@@ -237,7 +249,7 @@ router.post(
         lastRegistrationDate: req.body.lastRegistrationDate || undefined,
       });
 
-      const examStart = getExamStartDate(drive.examDate, drive.examTime);
+      const examStart = getExamStartDate(drive.examDate, drive.examTime, drive.timeZone);
       const examEnd = getExamEndDate(drive);
       const activationOpenAt = new Date(examStart.getTime() - 15 * 60 * 1000);
       const expiresAt = examEnd;
@@ -286,6 +298,7 @@ router.post(
             jobRole: drive.jobRole,
             examDate: drive.examDate,
             examTime: drive.examTime,
+            timeZone: drive.timeZone,
             examEndTime: drive.examEndTime,
             durationMinutes: drive.durationMinutes,
             activationLink,
@@ -494,7 +507,7 @@ router.post("/:driveId/technical-assessment/:studentId/invite", requireCompany, 
 
 const updateDriveScheduleHandler = async (req, res) => {
   try {
-    const { examTime, examEndTime, examDate, durationMinutes, notifyStudents } = req.body;
+    const { examTime, examEndTime, examDate, durationMinutes, notifyStudents, timeZone } = req.body;
 
     if (!examTime && !examEndTime && !examDate && durationMinutes === undefined) {
       return res.status(400).json({ message: "Please provide an exam start time, end time, date, or duration to update." });
@@ -508,6 +521,7 @@ const updateDriveScheduleHandler = async (req, res) => {
     const nextExamTime = examTime && typeof examTime === "string" && examTime.trim() ? examTime.trim() : drive.examTime;
     const nextExamEndTime = examEndTime && typeof examEndTime === "string" && examEndTime.trim() ? examEndTime.trim() : drive.examEndTime;
     const nextExamDate = examDate && typeof examDate === "string" && examDate.trim() ? examDate.trim() : drive.examDate;
+    const nextTimeZone = timeZone || drive.timeZone || "Asia/Kolkata";
     const nextDurationMinutes = durationMinutes !== undefined && !isNaN(Number(durationMinutes))
       ? Math.max(1, Number(durationMinutes))
       : drive.durationMinutes;
@@ -517,6 +531,7 @@ const updateDriveScheduleHandler = async (req, res) => {
       examTime: nextExamTime,
       examEndTime: nextExamEndTime,
       durationMinutes: nextDurationMinutes,
+      timeZone: nextTimeZone,
     });
     if (scheduleError) {
       return res.status(400).json({ message: scheduleError });
@@ -526,11 +541,12 @@ const updateDriveScheduleHandler = async (req, res) => {
     drive.examEndTime = nextExamEndTime;
     drive.examDate = nextExamDate;
     drive.durationMinutes = nextDurationMinutes;
+    drive.timeZone = nextTimeZone;
 
     await drive.save();
 
     // Recalculate schedule windows (Start Window to End Window)
-    const examStart = getExamStartDate(drive.examDate, drive.examTime);
+    const examStart = getExamStartDate(drive.examDate, drive.examTime, drive.timeZone);
     const examEnd = getExamEndDate(drive);
     const activationOpenAt = new Date(examStart.getTime() - 15 * 60 * 1000);
     const expiresAt = examEnd;
@@ -576,6 +592,7 @@ const updateDriveScheduleHandler = async (req, res) => {
             jobRole: drive.jobRole,
             examDate: drive.examDate,
             examTime: drive.examTime,
+            timeZone: drive.timeZone,
             examEndTime: drive.examEndTime,
             durationMinutes: drive.durationMinutes,
             activationLink: `${clientUrl}/invite/${invitation.token}`,
@@ -649,6 +666,7 @@ router.post("/:driveId/reminders", requireCompany, async (req, res) => {
         jobRole: drive.jobRole,
         examDate: drive.examDate,
         examTime: drive.examTime,
+        timeZone: drive.timeZone,
         durationMinutes: drive.durationMinutes,
         activationLink: `${clientUrl}/invite/${invitation.token}`,
       });

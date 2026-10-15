@@ -62,6 +62,7 @@ export async function sendStudentInvitationEmail({
   jobRole,
   examDate,
   examTime,
+  timeZone = "Asia/Kolkata",
   examEndTime,
   durationMinutes,
   activationLink,
@@ -92,6 +93,7 @@ export async function sendStudentInvitationEmail({
       "Round: Aptitude Assessment",
       `Exam Date: ${examDate}`,
       `Exam Window: ${windowText}`,
+      `Time Zone: ${timeZone}`,
       `Duration: ${durationMinutes} minutes (start anytime during the open window)`,
       "",
       "Please open your unique invitation link:",
@@ -122,6 +124,7 @@ export async function sendStudentInvitationEmail({
         <p><strong>Round</strong><br/>Aptitude Assessment</p>
         <p><strong>Exam Date</strong><br/>${examDate}</p>
         <p><strong>Exam Window</strong><br/>${windowText}</p>
+        <p><strong>Time Zone</strong><br/>${timeZone}</p>
         <p><strong>Duration</strong><br/>${durationMinutes} minutes (You can start at any time during this window)</p>
         <p>Please use your unique invitation link below.</p>
         <p><a href="${activationLink}">${activationLink}</a></p>

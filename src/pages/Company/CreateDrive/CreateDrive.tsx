@@ -24,6 +24,7 @@ const initialDrive = {
 
 export default function CreateDrive() {
   const navigate = useNavigate();
+  const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
   const [drive, setDrive] = useState(initialDrive);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
@@ -53,7 +54,7 @@ export default function CreateDrive() {
 
     try {
       setIsSubmitting(true);
-      const res = await createHiringDrive(drive);
+      const res = await createHiringDrive({ ...drive, timeZone: browserTimeZone });
       const created = res.data?.drive;
       setCreatedDrive({
         id: created?._id || "",
@@ -200,8 +201,8 @@ export default function CreateDrive() {
           </label>
 
           <FormField label="Exam Date" type="date" value={drive.examDate} onChange={(event) => updateDrive("examDate", event.target.value)} icon={<CalendarDays className="h-5 w-5" />} required />
-          <FormField label="Start Window Time" type="time" value={drive.examTime} onChange={(event) => updateDrive("examTime", event.target.value)} icon={<Clock3 className="h-5 w-5" />} required />
-          <FormField label="End Window Time" type="time" value={drive.examEndTime} onChange={(event) => updateDrive("examEndTime", event.target.value)} icon={<Clock3 className="h-5 w-5" />} required />
+          <FormField label={`Start Window Time (${browserTimeZone})`} type="time" value={drive.examTime} onChange={(event) => updateDrive("examTime", event.target.value)} icon={<Clock3 className="h-5 w-5" />} required />
+          <FormField label={`End Window Time (${browserTimeZone})`} type="time" value={drive.examEndTime} onChange={(event) => updateDrive("examEndTime", event.target.value)} icon={<Clock3 className="h-5 w-5" />} required />
           <FormField label="Duration (Minutes)" type="number" min="1" value={drive.durationMinutes} onChange={(event) => updateDrive("durationMinutes", event.target.value)} icon={<Timer className="h-5 w-5" />} required />
           <FormField label="Aptitude Cutoff (%)" type="number" min="0" max="100" value={drive.aptitudeCutoff} onChange={(event) => updateDrive("aptitudeCutoff", event.target.value)} required />
           <FormField label="Technical Oral Cutoff (%)" type="number" min="0" max="100" value={drive.technicalOralCutoff} onChange={(event) => updateDrive("technicalOralCutoff", event.target.value)} required />

@@ -7,6 +7,7 @@ export type HiringDrivePayload = {
   studentFile: File | null;
   examDate: string;
   examTime: string;
+  timeZone: string;
   examEndTime?: string;
   durationMinutes: string;
   rounds: string[];
@@ -53,6 +54,7 @@ export type HiringDrive = {
   };
   examDate: string;
   examTime: string;
+  timeZone?: string;
   examEndTime?: string;
   examEndDate?: string;
   durationMinutes: number;
@@ -172,6 +174,7 @@ export type UpdateDriveSchedulePayload = {
   examTime?: string;
   examEndTime?: string;
   examDate?: string;
+  timeZone?: string;
   durationMinutes?: number;
   notifyStudents?: boolean;
 };

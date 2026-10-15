@@ -173,7 +173,7 @@ router.post("/save", requireStudent, async (req, res) => {
 // POST /api/coding/submit
 router.post("/submit", requireStudent, async (req, res) => {
   try {
-    const { driveId, solutions } = req.body;
+    const { driveId, solutions, autoSubmitted } = req.body;
     const context = await loadAuthorizedCodingContext(req, res, driveId);
     if (!context) return;
     const { student, drive } = context;

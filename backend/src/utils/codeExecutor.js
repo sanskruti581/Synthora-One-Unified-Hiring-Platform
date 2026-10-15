@@ -136,6 +136,10 @@ export async function executeCode({ language, sourceCode, testCases = [], timeLi
     let runCommand = "";
     let runArgs = [];
 
+    const isWindows = process.platform === "win32";
+    const exeName = isWindows ? "solution.exe" : "solution";
+    const exePath = path.join(tempDir, exeName);
+
     // 1. Language preparation & compilation
     if (normLang === "javascript") {
       const filePath = path.join(tempDir, "solution.js");
@@ -145,14 +149,17 @@ export async function executeCode({ language, sourceCode, testCases = [], timeLi
     } else if (normLang === "python") {
       const filePath = path.join(tempDir, "solution.py");
       await fs.writeFile(filePath, sourceCode, "utf8");
-      runCommand = "python";
+      runCommand = isWindows ? "python" : (process.env.PYTHON_CMD || "python3");
       runArgs = [filePath];
     } else if (normLang === "java") {
       const filePath = path.join(tempDir, "Solution.java");
       await fs.writeFile(filePath, sourceCode, "utf8");
       const compileRes = await runSubProcess("javac", ["Solution.java"], "", tempDir, 8000);
       if (compileRes.exitCode !== 0) {
-        const errorMsg = compileRes.stderr || compileRes.stdout || "Compilation Failed";
+        let errorMsg = compileRes.stderr || compileRes.stdout || "Compilation Failed";
+        if (errorMsg.includes("ENOENT") || compileRes.exitCode === -1) {
+          errorMsg = "Java compiler (javac) is not installed on this server host. Please install Java JDK or use JavaScript, Python, C, or C++.";
+        }
         return {
           results: testCases.map(tc => ({
             input: tc.input,
@@ -170,11 +177,13 @@ export async function executeCode({ language, sourceCode, testCases = [], timeLi
       runArgs = ["Solution"];
     } else if (normLang === "c") {
       const filePath = path.join(tempDir, "solution.c");
-      const exePath = path.join(tempDir, "solution.exe");
       await fs.writeFile(filePath, sourceCode, "utf8");
-      const compileRes = await runSubProcess("gcc", ["solution.c", "-o", "solution.exe"], "", tempDir, 8000);
+      const compileRes = await runSubProcess("gcc", ["solution.c", "-o", exeName], "", tempDir, 8000);
       if (compileRes.exitCode !== 0) {
-        const errorMsg = compileRes.stderr || compileRes.stdout || "Compilation Failed";
+        let errorMsg = compileRes.stderr || compileRes.stdout || "Compilation Failed";
+        if (errorMsg.includes("ENOENT") || compileRes.exitCode === -1) {
+          errorMsg = "C compiler (gcc) is not installed on this server host. Please install GCC or use JavaScript or Python.";
+        }
         return {
           results: testCases.map(tc => ({
             input: tc.input,
@@ -192,11 +201,13 @@ export async function executeCode({ language, sourceCode, testCases = [], timeLi
       runArgs = [];
     } else if (normLang === "cpp") {
       const filePath = path.join(tempDir, "solution.cpp");
-      const exePath = path.join(tempDir, "solution.exe");
       await fs.writeFile(filePath, sourceCode, "utf8");
-      const compileRes = await runSubProcess("g++", ["solution.cpp", "-o", "solution.exe"], "", tempDir, 8000);
+      const compileRes = await runSubProcess("g++", ["solution.cpp", "-o", exeName], "", tempDir, 8000);
       if (compileRes.exitCode !== 0) {
-        const errorMsg = compileRes.stderr || compileRes.stdout || "Compilation Failed";
+        let errorMsg = compileRes.stderr || compileRes.stdout || "Compilation Failed";
+        if (errorMsg.includes("ENOENT") || compileRes.exitCode === -1) {
+          errorMsg = "C++ compiler (g++) is not installed on this server host. Please install GCC/G++ or use JavaScript or Python.";
+        }
         return {
           results: testCases.map(tc => ({
             input: tc.input,

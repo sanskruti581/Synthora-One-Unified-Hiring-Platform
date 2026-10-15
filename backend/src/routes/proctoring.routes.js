@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { requireStudent } from "../middleware/auth.js";
+import { requireStudent, requireCompany } from "../middleware/auth.js";
 import Student from "../models/Student.js";
 import HiringDrive from "../models/HiringDrive.js";
 import ProctoringEvent from "../models/ProctoringEvent.js";
@@ -31,18 +31,20 @@ router.post("/events", requireStudent, async (req, res) => {
   }
 });
 
-router.get("/events", async (_req, res) => {
+router.get("/events", requireCompany, async (req, res) => {
   try {
-    const events = await ProctoringEvent.find().sort({ occurredAt: -1 }).lean();
+    const drives = await HiringDrive.find({ company: req.companyId }).select("_id");
+    const driveIds = drives.map((d) => d._id);
+    const events = await ProctoringEvent.find({ drive: { $in: driveIds } }).sort({ occurredAt: -1 }).lean();
     res.json(events);
   } catch (error) {
     res.status(500).json({ message: "Failed to load proctoring events", error: error.message });
   }
 });
 
-router.get("/report/:driveId", async (req, res) => {
+router.get("/report/:driveId", requireCompany, async (req, res) => {
   try {
-    const drive = await HiringDrive.findById(req.params.driveId);
+    const drive = await HiringDrive.findOne({ _id: req.params.driveId, company: req.companyId });
 
     if (!drive) {
       return res.status(404).json({ message: "Drive not found" });

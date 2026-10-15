@@ -152,6 +152,7 @@ export default function DriveDetails() {
       const res = await updateDriveSchedule(driveId, {
         examDate: editExamDate,
         examTime: editExamTime,
+        timeZone: drive?.timeZone || "Asia/Kolkata",
         examEndTime: editExamEndTime || undefined,
         durationMinutes: Number(editDurationMinutes) || drive?.durationMinutes || 60,
         notifyStudents,

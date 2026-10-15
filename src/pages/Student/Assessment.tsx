@@ -203,6 +203,20 @@ export default function Assessment() {
       });
   }, [driveId]);
 
+  // Keep the waiting room in sync with the server schedule so a student who
+  // opened the email early can start as soon as the window opens.
+  useEffect(() => {
+    if (!assessment || canStartExam || assessment.assessmentStatus === "Started" || assessment.assessmentStatus === "Completed") return;
+
+    const refreshSchedule = () => {
+      getAssessment(driveId)
+        .then((response) => setAssessment(response.data))
+        .catch(() => undefined);
+    };
+    const interval = window.setInterval(refreshSchedule, 10_000);
+    return () => window.clearInterval(interval);
+  }, [assessment, canStartExam, driveId]);
+
   // ── Load Questions ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (!hasStartedExam || questions.length > 0) return;
