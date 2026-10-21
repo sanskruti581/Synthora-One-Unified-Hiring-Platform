@@ -94,7 +94,7 @@ Partially implemented or limited:
 - Aptitude scoring is calculated on the frontend and trusted by the backend.
 - Some dashboard/sidebar buttons route back to the dashboard or are decorative.
 - Proctoring uses browser APIs and heuristic checks; it is not a robust identity verification system.
-- Email sending depends on SMTP configuration and falls back to status `smtp_not_configured` when absent.
+- Email sending supports the Brevo HTTPS API or SMTP and falls back to status `smtp_not_configured` when neither provider is configured.
 
 ### What Makes It Different From A Traditional Assessment System
 
@@ -172,7 +172,7 @@ Partially implemented or limited:
 | `vite.config.ts` | Vite config with React plugin. |
 | `tailwind.config.ts` | Tailwind theme, colors, animations, content paths. |
 | `.env.example` | Frontend API base URL example. |
-| `backend/.env.example` | Backend env variables for port, client URL, MongoDB, JWT, Groq, SMTP. |
+| `backend/.env.example` | Backend env variables for port, client URL, MongoDB, JWT, Groq, Brevo API, and SMTP fallback. |
 | `HOW_TO_RUN.md` | Local run instructions and demo route. |
 | `src/` | React frontend. |
 | `backend/src/` | Express/MongoDB backend. |
@@ -1480,7 +1480,7 @@ Company Browser
   -> Axios service with company JWT
   -> Express /api/company/drives
   -> MongoDB: Company, HiringDrive, Student, Invitation
-  -> Nodemailer SMTP for invitation emails
+  -> Brevo HTTPS API or Nodemailer SMTP for invitation emails
 
 Student Browser
   -> Invitation link /invite/:token

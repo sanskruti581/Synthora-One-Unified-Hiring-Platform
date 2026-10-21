@@ -1,12 +1,49 @@
 import nodemailer from "nodemailer";
 
+function redactSmtpSecrets(value) {
+  let text = String(value ?? "");
+  const secretName = /(?:PASS|PASSWORD|SECRET|TOKEN|API[_-]?KEY|MONGO_URI|SMTP_USER)/i;
+  const secrets = Object.entries(process.env)
+    .filter(([name, secret]) => secretName.test(name) && typeof secret === "string" && secret.length >= 4)
+    .flatMap(([, secret]) => [secret, secret.replace(/\s+/g, ""), encodeURIComponent(secret)])
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+
+  for (const secret of secrets) {
+    text = text.split(secret).join("[REDACTED]");
+  }
+
+  return text.slice(0, 1000);
+}
+
+function logMailFailure(error) {
+  const safeError = {
+    message: redactSmtpSecrets(error?.message || "Unknown SMTP error"),
+    code: redactSmtpSecrets(error?.code || ""),
+    command: redactSmtpSecrets(error?.command || ""),
+    responseCode: error?.responseCode,
+    response: redactSmtpSecrets(error?.response || ""),
+  };
+
+  console.error("[mailer] Email delivery failed", safeError);
+
+  // Pass only sanitized diagnostics to route-level catch handlers and persistence.
+  const sanitizedError = new Error(safeError.message);
+  Object.assign(sanitizedError, safeError);
+  return sanitizedError;
+}
+
 function sanitizeSmtpConfig() {
   const host = process.env.SMTP_HOST?.trim();
   const user = process.env.SMTP_USER?.trim();
   const pass = process.env.SMTP_PASS?.replace(/\s+/g, "");
   const port = Number(process.env.SMTP_PORT || 587);
-  const fromAddress = process.env.MAIL_FROM?.trim() || user;
+  const configuredFrom = process.env.MAIL_FROM?.trim();
+  const fromAddress = configuredFrom || user;
   const fromName = process.env.MAIL_FROM_NAME?.trim() || "Synthora Recruitment";
+  const from = fromAddress?.includes("<")
+    ? fromAddress
+    : `"${fromName}" <${fromAddress}>`;
 
   return {
     host,
@@ -16,7 +53,7 @@ function sanitizeSmtpConfig() {
       user,
       pass,
     },
-    from: `"${fromName}" <${fromAddress}>`,
+    from,
     replyTo: process.env.MAIL_REPLY_TO?.trim() || fromAddress,
   };
 }
@@ -24,6 +61,72 @@ function sanitizeSmtpConfig() {
 function hasSmtpConfig() {
   const { host, auth } = sanitizeSmtpConfig();
   return Boolean(host && auth.user && auth.pass);
+}
+
+function isBrevoSelected() {
+  return process.env.EMAIL_PROVIDER?.trim().toLowerCase() === "brevo" || Boolean(process.env.BREVO_API_KEY?.trim());
+}
+
+function hasBrevoConfig() {
+  return Boolean(process.env.BREVO_API_KEY?.trim() && process.env.MAIL_FROM?.trim());
+}
+
+function hasEmailConfig() {
+  return isBrevoSelected() ? hasBrevoConfig() : hasSmtpConfig();
+}
+
+function parseMailbox(value) {
+  if (typeof value !== "string") return value;
+  const match = value.trim().match(/^(.*?)\s*<([^<>]+)>$/);
+  if (!match) return { email: value.trim() };
+  return {
+    name: match[1].trim().replace(/^\"|\"$/g, ""),
+    email: match[2].trim(),
+  };
+}
+
+async function sendConfiguredEmail(message) {
+  if (isBrevoSelected()) {
+    const apiKey = process.env.BREVO_API_KEY?.trim();
+    const from = parseMailbox(message.from);
+    const replyTo = message.replyTo ? parseMailbox(message.replyTo) : undefined;
+    const recipients = (Array.isArray(message.to) ? message.to : [message.to]).map(parseMailbox);
+    const payload = {
+      sender: from,
+      to: recipients,
+      subject: message.subject,
+      ...(message.html ? { htmlContent: message.html } : {}),
+      ...(message.text ? { textContent: message.text } : {}),
+      ...(replyTo ? { replyTo } : {}),
+      ...(message.headers ? { headers: message.headers } : {}),
+    };
+
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "api-key": apiKey || "",
+        "accept": "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    const responseBody = await response.text();
+    if (!response.ok) {
+      throw new Error(`Brevo API returned HTTP ${response.status}: ${responseBody}`);
+    }
+
+    let result = {};
+    try {
+      result = responseBody ? JSON.parse(responseBody) : {};
+    } catch {
+      result = {};
+    }
+    return { messageId: result.messageId || "accepted-by-brevo" };
+  }
+
+  const { host, port, secure, auth } = sanitizeSmtpConfig();
+  const transporter = nodemailer.createTransport({ host, port, secure, auth });
+  return transporter.sendMail(message);
 }
 
 export function formatGreetingName(name) {
@@ -67,17 +170,11 @@ export async function sendStudentInvitationEmail({
   durationMinutes,
   activationLink,
 }) {
-  if (!hasSmtpConfig()) {
+  if (!hasEmailConfig()) {
     return { status: "smtp_not_configured" };
   }
 
-  const { host, port, secure, auth, from, replyTo } = sanitizeSmtpConfig();
-  const transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    auth,
-  });
+  const { from, replyTo } = sanitizeSmtpConfig();
 
   try {
     const greeting = formatGreetingName(studentName);
@@ -105,7 +202,7 @@ export async function sendStudentInvitationEmail({
       "Synthora Recruitment Team",
     ].join("\n");
 
-    const info = await transporter.sendMail({
+    const info = await sendConfiguredEmail({
       from,
       replyTo,
       to,
@@ -134,11 +231,10 @@ export async function sendStudentInvitationEmail({
     `,
     });
 
-    console.log(`Email sent to ${to} via ${host}:${port} (${secure ? "SSL" : "TLS"})`, { messageId: info.messageId });
+    console.log(`Email accepted for ${to} via ${isBrevoSelected() ? "Brevo API" : "SMTP"}`, { messageId: info.messageId });
     return { status: "sent" };
   } catch (error) {
-    console.error(`Failed to send email to ${to}:`, error?.message || error);
-    throw error;
+    throw logMailFailure(error);
   }
 }
 
@@ -154,17 +250,11 @@ export async function sendTechnicalAssessmentInvitationEmail({
   aptitudeScore,
   codingScore,
 }) {
-  if (!hasSmtpConfig()) {
+  if (!hasEmailConfig()) {
     return { status: "smtp_not_configured" };
   }
 
-  const { host, port, secure, auth, from, replyTo } = sanitizeSmtpConfig();
-  const transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    auth,
-  });
+  const { from, replyTo } = sanitizeSmtpConfig();
 
   try {
     const startsAt = new Date(accessStartsAt).toLocaleString();
@@ -207,7 +297,7 @@ export async function sendTechnicalAssessmentInvitationEmail({
       "Synthora Recruitment Team",
     ].join("\n");
 
-    const info = await transporter.sendMail({
+    const info = await sendConfiguredEmail({
       from,
       replyTo,
       to,
@@ -237,11 +327,10 @@ export async function sendTechnicalAssessmentInvitationEmail({
     `,
     });
 
-    console.log(`Technical oral invitation email sent to ${to} via ${host}:${port} (${secure ? "SSL" : "TLS"})`, { messageId: info.messageId });
+    console.log(`Technical oral invitation email accepted for ${to} via ${isBrevoSelected() ? "Brevo API" : "SMTP"}`, { messageId: info.messageId });
     return { status: "sent" };
   } catch (error) {
-    console.error(`Failed to send technical assessment email to ${to}:`, error?.message || error);
-    throw error;
+    throw logMailFailure(error);
   }
 }
 
@@ -253,17 +342,11 @@ export async function sendAptitudeClearedEmail({
   jobRole,
   score,
 }) {
-  if (!hasSmtpConfig()) {
+  if (!hasEmailConfig()) {
     return { status: "smtp_not_configured" };
   }
 
-  const { host, port, secure, auth, from, replyTo } = sanitizeSmtpConfig();
-  const transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    auth,
-  });
+  const { from, replyTo } = sanitizeSmtpConfig();
 
   try {
     const greeting = formatGreetingName(studentName);
@@ -284,7 +367,7 @@ export async function sendAptitudeClearedEmail({
       "Synthora Recruitment Team",
     ].join("\n");
 
-    const info = await transporter.sendMail({
+    const info = await sendConfiguredEmail({
       from,
       replyTo,
       to,
@@ -308,10 +391,9 @@ export async function sendAptitudeClearedEmail({
     `,
     });
 
-    console.log(`Aptitude cleared email sent to ${to} via ${host}:${port} (${secure ? "SSL" : "TLS"})`, { messageId: info.messageId });
+    console.log(`Aptitude cleared email accepted for ${to} via ${isBrevoSelected() ? "Brevo API" : "SMTP"}`, { messageId: info.messageId });
     return { status: "sent" };
   } catch (error) {
-    console.error(`Failed to send aptitude cleared email to ${to}:`, error?.message || error);
-    throw error;
+    throw logMailFailure(error);
   }
 }
