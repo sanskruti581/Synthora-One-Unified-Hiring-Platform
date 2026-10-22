@@ -1,254 +1,66 @@
 import CodingQuestion from "../models/CodingQuestion.js";
 
-const questions = [
-  // ==========================================
-  // ACTIVE TESTING QUESTION: Addition of 2 Numbers
-  // ==========================================
-  {
-    title: "Addition of Two Numbers",
-    slug: "addition-of-two-numbers",
-    difficulty: "Easy",
-    description: "Given two integers a and b, calculate and return their sum (a + b).\n\nRead the two integers from standard input (each on a separate line) and output their sum to standard output.",
-    constraints: [
-      "-10^9 <= a, b <= 10^9"
-    ],
-    examples: [
-      {
-        input: "2\n3",
-        output: "5",
-        explanation: "2 + 3 = 5"
-      },
-      {
-        input: "10\n-4",
-        output: "6",
-        explanation: "10 + (-4) = 6"
-      }
-    ],
-    starterCode: {
-      javascript: `function addNumbers(a, b) {\n  // Return the sum of a and b\n  return a + b;\n}\n\n// Read inputs from standard input\nconst fs = require('fs');\nconst input = fs.readFileSync(0, 'utf-8').trim().split(/\\s+/);\nif (input.length >= 2) {\n  const a = parseInt(input[0], 10);\n  const b = parseInt(input[1], 10);\n  console.log(addNumbers(a, b));\n}`,
-      python: `def add_numbers(a, b):\n    # Return the sum of a and b\n    return a + b\n\nif __name__ == "__main__":\n    import sys\n    tokens = sys.stdin.read().split()\n    if len(tokens) >= 2:\n        a = int(tokens[0])\n        b = int(tokens[1])\n        print(add_numbers(a, b))`,
-      java: `import java.util.Scanner;\n\npublic class Solution {\n    public static int addNumbers(int a, int b) {\n        // Return the sum of a and b\n        return a + b;\n    }\n\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        if (scanner.hasNextInt()) {\n            int a = scanner.nextInt();\n            int b = scanner.nextInt();\n            System.out.println(addNumbers(a, b));\n        }\n        scanner.close();\n    }\n}`,
-      c: `#include <stdio.h>\n\nint addNumbers(int a, int b) {\n    // Return the sum of a and b\n    return a + b;\n}\n\nint main() {\n    int a, b;\n    if (scanf("%d %d", &a, &b) == 2) {\n        printf("%d\\n", addNumbers(a, b));\n    }\n    return 0;\n}`,
-      cpp: `#include <iostream>\n\nusing namespace std;\n\nint addNumbers(int a, int b) {\n    // Return the sum of a and b\n    return a + b;\n}\n\nint main() {\n    int a, b;\n    if (cin >> a >> b) {\n        cout << addNumbers(a, b) << endl;\n    }\n    return 0;\n}`
+const questions = [{
+  "title": "Two Sum",
+  "slug": "two-sum",
+  "difficulty": "Easy",
+  "description": "Given an array of integers nums and an integer target, return the indices of the two numbers whose sum equals target. Each input has exactly one solution, and you may not use the same element twice. Return the indices in any order.\n\nInput: The first line contains a JSON array of integers. The second line contains target.\nOutput: Print a JSON array containing the two indices.",
+  "constraints": [
+    "2 <= nums.length <= 10^4",
+    "-10^9 <= nums[i], target <= 10^9",
+    "Exactly one valid answer exists."
+  ],
+  "examples": [
+    {
+      "input": "[2, 7, 11, 15]\n9",
+      "output": "[0,1]",
+      "explanation": "nums[0] + nums[1] = 9."
     },
-    testCases: [
-      { input: "2\n3", expectedOutput: "5", isHidden: false },
-      { input: "10\n-4", expectedOutput: "6", isHidden: false },
-      { input: "0\n0", expectedOutput: "0", isHidden: true },
-      { input: "100\n250", expectedOutput: "350", isHidden: true },
-      { input: "-15\n-35", expectedOutput: "-50", isHidden: true },
-      { input: "0\n-99", expectedOutput: "-99", isHidden: true },
-      { input: "1000000\n2000000", expectedOutput: "3000000", isHidden: true }
-    ],
-    marks: 10,
-    timeLimit: 2000,
-    memoryLimit: 256
-  }
-
-  /*
-  // ==========================================================
-  // COMMENTED OUT FOR TESTING (Uncomment when ready for production)
-  // ==========================================================
-  ,
-  {
-    title: "Two Sum",
-    slug: "two-sum",
-    difficulty: "Easy",
-    description: "Given an array of integers nums and an integer target, return indices of the two numbers such that they add up to target.\nYou may assume that each input would have exactly one solution, and you may not use the same element twice.\nYou can return the answer in any order.",
-    constraints: [
-      "2 <= nums.length <= 10^4",
-      "-10^9 <= nums[i] <= 10^9",
-      "-10^9 <= target <= 10^9",
-      "Only one valid answer exists."
-    ],
-    examples: [
-      {
-        input: "[2, 7, 11, 15]\n9",
-        output: "[0, 1]",
-        explanation: "Because nums[0] + nums[1] == 9, we return [0, 1]."
-      },
-      {
-        input: "[3, 2, 4]\n6",
-        output: "[1, 2]",
-        explanation: "Because nums[1] + nums[2] == 6, we return [1, 2]."
-      }
-    ],
-    starterCode: {
-      javascript: `function twoSum(nums, target) {\n  // Write your code here\n  \n}\n\n// Read from stdin to handle inputs\nconst fs = require('fs');\nconst input = fs.readFileSync(0, 'utf-8').trim().split('\\n');\nif(input.length >= 2) {\n  const nums = JSON.parse(input[0]);\n  const target = parseInt(input[1], 10);\n  console.log(JSON.stringify(twoSum(nums, target)));\n}`,
-      python: `def two_sum(nums, target):\n    # Write your code here\n    pass\n\nif __name__ == "__main__":\n    import sys, json\n    input_data = sys.stdin.read().strip().split('\\n')\n    if len(input_data) >= 2:\n        nums = json.loads(input_data[0])\n        target = int(input_data[1])\n        print(json.dumps(two_sum(nums, target)))`
-    },
-    testCases: [
-      { input: "[2, 7, 11, 15]\n9", expectedOutput: "[0,1]", isHidden: false },
-      { input: "[3, 2, 4]\n6", expectedOutput: "[1,2]", isHidden: false },
-      { input: "[3, 3]\n6", expectedOutput: "[0,1]", isHidden: true },
-      { input: "[1, 2, 3, 4, 5]\n9", expectedOutput: "[3,4]", isHidden: true },
-      { input: "[-1, -2, -3, -4, -5]\n-8", expectedOutput: "[2,4]", isHidden: true }
-    ],
-    marks: 10,
-    timeLimit: 2000,
-    memoryLimit: 256
+    {
+      "input": "[3, 2, 4]\n6",
+      "output": "[1,2]",
+      "explanation": "nums[1] + nums[2] = 6."
+    }
+  ],
+  "starterCode": {
+    "javascript": "function twoSum(nums, target) {\n  // Return the two indices\n}\nconst fs = require('fs');\nconst lines = fs.readFileSync(0, 'utf8').trim().split(/\\r?\\n/);\nconsole.log(JSON.stringify(twoSum(JSON.parse(lines[0]), Number(lines[1]))));",
+    "python": "def two_sum(nums, target):\n    # Return the two indices\n    pass\nif __name__ == '__main__':\n    import sys, json\n    lines = sys.stdin.read().strip().splitlines()\n    print(json.dumps(two_sum(json.loads(lines[0]), int(lines[1]))))",
+    "java": "import java.util.*;\npublic class Solution {\n  static int[] twoSum(int[] nums, int target) { return new int[]{}; }\n  public static void main(String[] args) { Scanner s=new Scanner(System.in); String line=s.nextLine().replaceAll(\"[\\\\[\\\\] ]\", \"\"); int[] a=Arrays.stream(line.split(\",\")).mapToInt(Integer::parseInt).toArray(); int t=Integer.parseInt(s.nextLine()); System.out.println(Arrays.toString(twoSum(a,t)).replace(\" \",\"\")); }\n}",
+    "cpp": "#include <bits/stdc++.h>\nusing namespace std;\nint main(){ string line; getline(cin,line); for(char &c:line) if(c=='['||c==']'||c==',') c=' '; stringstream ss(line); vector<int> a; int x; while(ss>>x)a.push_back(x); int t; cin>>t; // Implement and print the pair of indices\n}"
   },
-  {
-    title: "Palindrome Check",
-    slug: "palindrome-check",
-    difficulty: "Easy",
-    description: "A phrase is a palindrome if, after converting all uppercase letters into lowercase letters and removing all non-alphanumeric characters, it reads the same forward and backward. Alphanumeric characters include letters and numbers.\nGiven a string s, return true if it is a palindrome, or false otherwise.",
-    constraints: [
-      "1 <= s.length <= 2 * 10^5",
-      "s consists only of printable ASCII characters."
-    ],
-    examples: [
-      {
-        input: '\"A man, a plan, a canal: Panama\"',
-        output: "true",
-        explanation: '\"amanaplanacanalpanama\" is a palindrome.'
-      },
-      {
-        input: '\"race a car\"',
-        output: "false",
-        explanation: '\"raceacar\" is not a palindrome.'
-      }
-    ],
-    starterCode: {
-      javascript: `function isPalindrome(s) {\n  // Write your code here\n  \n}\n\n// Read from stdin to handle inputs\nconst fs = require('fs');\nconst input = fs.readFileSync(0, 'utf-8').trim();\nif(input) {\n  const s = JSON.parse(input);\n  console.log(isPalindrome(s));\n}`,
-      python: `def is_palindrome(s):\n    # Write your code here\n    pass\n\nif __name__ == "__main__":\n    import sys, json\n    input_data = sys.stdin.read().strip()\n    if input_data:\n        s = json.loads(input_data)\n        print(str(is_palindrome(s)).lower())`
+  "testCases": [
+    {
+      "input": "[2, 7, 11, 15]\n9",
+      "expectedOutput": "[0,1]",
+      "isHidden": false
     },
-    testCases: [
-      { input: '\"A man, a plan, a canal: Panama\"', expectedOutput: "true", isHidden: false },
-      { input: '\"race a car\"', expectedOutput: "false", isHidden: false },
-      { input: '\" \"', expectedOutput: "true", isHidden: true },
-      { input: '\"0P\"', expectedOutput: "false", isHidden: true },
-      { input: '\"ab_a\"', expectedOutput: "true", isHidden: true }
-    ],
-    marks: 10,
-    timeLimit: 2000,
-    memoryLimit: 256
-  },
-  {
-    title: "FizzBuzz Variant",
-    slug: "fizzbuzz-variant",
-    difficulty: "Medium",
-    description: "Given an integer n, return a string array answer (1-indexed) where:\nanswer[i] == \"FizzBuzz\" if i is divisible by 3 and 5.\nanswer[i] == \"Fizz\" if i is divisible by 3.\nanswer[i] == \"Buzz\" if i is divisible by 5.\nanswer[i] == i (as a string) if none of the above conditions are true.",
-    constraints: [
-      "1 <= n <= 10^4"
-    ],
-    examples: [
-      {
-        input: "3",
-        output: '[\"1\",\"2\",\"Fizz\"]',
-        explanation: ""
-      },
-      {
-        input: "5",
-        output: '[\"1\",\"2\",\"Fizz\",\"4\",\"Buzz\"]',
-        explanation: ""
-      }
-    ],
-    starterCode: {
-      javascript: `function fizzBuzz(n) {\n  // Write your code here\n  \n}\n\n// Read from stdin to handle inputs\nconst fs = require('fs');\nconst input = fs.readFileSync(0, 'utf-8').trim();\nif(input) {\n  const n = parseInt(input, 10);\n  console.log(JSON.stringify(fizzBuzz(n)));\n}`,
-      python: `def fizz_buzz(n):\n    # Write your code here\n    pass\n\nif __name__ == "__main__":\n    import sys, json\n    input_data = sys.stdin.read().strip()\n    if input_data:\n        n = int(input_data)\n        print(json.dumps(fizz_buzz(n)))`
+    {
+      "input": "[3, 2, 4]\n6",
+      "expectedOutput": "[1,2]",
+      "isHidden": false
     },
-    testCases: [
-      { input: "3", expectedOutput: '[\"1\",\"2\",\"Fizz\"]', isHidden: false },
-      { input: "5", expectedOutput: '[\"1\",\"2\",\"Fizz\",\"4\",\"Buzz\"]', isHidden: false },
-      { input: "15", expectedOutput: '[\"1\",\"2\",\"Fizz\",\"4\",\"Buzz\",\"Fizz\",\"7\",\"8\",\"Fizz\",\"Buzz\",\"11\",\"Fizz\",\"13\",\"14\",\"FizzBuzz\"]', isHidden: true },
-      { input: "1", expectedOutput: '[\"1\"]', isHidden: true },
-      { input: "10", expectedOutput: '[\"1\",\"2\",\"Fizz\",\"4\",\"Buzz\",\"Fizz\",\"7\",\"8\",\"Fizz\",\"Buzz\"]', isHidden: true }
-    ],
-    marks: 15,
-    timeLimit: 2000,
-    memoryLimit: 256
-  },
-  {
-    title: "Maximum Subarray",
-    slug: "maximum-subarray",
-    difficulty: "Medium",
-    description: "Given an integer array nums, find the contiguous subarray (containing at least one number) which has the largest sum and return its sum.\nA subarray is a contiguous part of an array.",
-    constraints: [
-      "1 <= nums.length <= 10^5",
-      "-10^4 <= nums[i] <= 10^4"
-    ],
-    examples: [
-      {
-        input: "[-2, 1, -3, 4, -1, 2, 1, -5, 4]",
-        output: "6",
-        explanation: "[4,-1,2,1] has the largest sum = 6."
-      },
-      {
-        input: "[1]",
-        output: "1",
-        explanation: "The subarray [1] has the largest sum 1."
-      }
-    ],
-    starterCode: {
-      javascript: `function maxSubArray(nums) {\n  // Write your code here\n  \n}\n\n// Read from stdin to handle inputs\nconst fs = require('fs');\nconst input = fs.readFileSync(0, 'utf-8').trim();\nif(input) {\n  const nums = JSON.parse(input);\n  console.log(maxSubArray(nums));\n}`,
-      python: `def max_sub_array(nums):\n    # Write your code here\n    pass\n\nif __name__ == "__main__":\n    import sys, json\n    input_data = sys.stdin.read().strip()\n    if input_data:\n        nums = json.loads(input_data)\n        print(max_sub_array(nums))`
+    {
+      "input": "[3, 3]\n6",
+      "expectedOutput": "[0,1]",
+      "isHidden": true
     },
-    testCases: [
-      { input: "[-2, 1, -3, 4, -1, 2, 1, -5, 4]", expectedOutput: "6", isHidden: false },
-      { input: "[1]", expectedOutput: "1", isHidden: false },
-      { input: "[5, 4, -1, 7, 8]", expectedOutput: "23", isHidden: true },
-      { input: "[-1]", expectedOutput: "-1", isHidden: true },
-      { input: "[-2, -1]", expectedOutput: "-1", isHidden: true }
-    ],
-    marks: 15,
-    timeLimit: 2000,
-    memoryLimit: 256
-  },
-  {
-    title: "Balanced Parentheses",
-    slug: "balanced-parentheses",
-    difficulty: "Hard",
-    description: "Given a string s containing just the characters '(', ')', '{', '}', '[' and ']', determine if the input string is valid.\nAn input string is valid if:\n1. Open brackets must be closed by the same type of brackets.\n2. Open brackets must be closed in the correct order.\n3. Every close bracket has a corresponding open bracket of the same type.",
-    constraints: [
-      "1 <= s.length <= 10^4",
-      "s consists of parentheses only '()[]{}'."
-    ],
-    examples: [
-      {
-        input: '\"()\"',
-        output: "true",
-        explanation: "Valid because it's a simple balanced pair."
-      },
-      {
-        input: '\"()[]{}\"',
-        output: "true",
-        explanation: "Valid because all pairs are matched and balanced."
-      }
-    ],
-    starterCode: {
-      javascript: `function isValid(s) {\n  // Write your code here\n  \n}\n\n// Read from stdin to handle inputs\nconst fs = require('fs');\nconst input = fs.readFileSync(0, 'utf-8').trim();\nif(input) {\n  const s = JSON.parse(input);\n  console.log(isValid(s));\n}`,
-      python: `def is_valid(s):\n    # Write your code here\n    pass\n\nif __name__ == "__main__":\n    import sys, json\n    input_data = sys.stdin.read().strip()\n    if input_data:\n        s = json.loads(input_data)\n        print(str(is_valid(s)).lower())`
-    },
-    testCases: [
-      { input: '\"()\"', expectedOutput: "true", isHidden: false },
-      { input: '\"()[]{}\"', expectedOutput: "true", isHidden: false },
-      { input: '\"(]\"', expectedOutput: "false", isHidden: true },
-      { input: '\"([)]\"', expectedOutput: "false", isHidden: true },
-      { input: '\"{[]}\"', expectedOutput: "true", isHidden: true },
-      { input: '\"]\"', expectedOutput: "false", isHidden: true }
-    ],
-    marks: 20,
-    timeLimit: 2000,
-    memoryLimit: 256
-  }
-  */
-];
+    {
+      "input": "[-1, -2, -3, -4, -5]\n-8",
+      "expectedOutput": "[2,4]",
+      "isHidden": true
+    }
+  ],
+  "marks": 10,
+  "timeLimit": 2000,
+  "memoryLimit": 256
+}];
 
 export async function seedCodingQuestions() {
   try {
-    // Clear previously seeded questions so that only the active testing question is loaded
     await CodingQuestion.deleteMany({});
-
-    for (const q of questions) {
-      await CodingQuestion.findOneAndUpdate(
-        { slug: q.slug },
-        { $set: q },
-        { upsert: true, new: true }
-      );
-    }
-    console.log(`✅ Seeded ${questions.length} coding question(s) successfully (testing mode)`);
+    for (const q of questions) await CodingQuestion.findOneAndUpdate({ slug: q.slug }, { $set: q }, { upsert: true, new: true });
+    console.log(`Seeded ${questions.length} coding question(s) successfully`);
   } catch (err) {
-    console.error("❌ Error seeding coding questions:", err);
+    console.error("Error seeding coding questions:", err);
   }
 }

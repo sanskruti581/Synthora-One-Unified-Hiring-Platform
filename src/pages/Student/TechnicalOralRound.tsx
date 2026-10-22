@@ -62,6 +62,11 @@ const DEMO_QUESTIONS: OralQuestionTurn[] = [
     category: "Adaptive Follow-up",
     question: "Based on your previous answers, how would you use caching and indexing to improve scalability?",
   },
+  { questionNumber: 6, category: "Fundamental", question: "What is the difference between a stack and a queue, and when would you use each?" },
+  { questionNumber: 7, category: "Conceptual", question: "Explain how an index can improve a database query and describe one tradeoff." },
+  { questionNumber: 8, category: "Practical", question: "How would you validate user input before storing it in an application?" },
+  { questionNumber: 9, category: "Scenario", question: "A service starts returning intermittent errors under load. How would you investigate the cause?" },
+  { questionNumber: 10, category: "Practical", question: "Describe a technical decision you made in a project and what you would improve now." },
 ];
 
 function buildDemoSession(): OralInterviewSession {
@@ -141,7 +146,7 @@ export default function TechnicalOralRound() {
   const [session, setSession] = useState<OralInterviewSession | null>(null);
   const [currentQuestion, setCurrentQuestion] = useState<OralQuestionTurn | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [maxQuestions, setMaxQuestions] = useState(5);
+  const [maxQuestions, setMaxQuestions] = useState(10);
   const [isInitializing, setIsInitializing] = useState(true);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
@@ -154,6 +159,7 @@ export default function TechnicalOralRound() {
 
   // Speech & Voice state
   const [spokenTranscript, setSpokenTranscript] = useState("");
+  const [manualAnswer, setManualAnswer] = useState("");
   const [interimText, setInterimText] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [isSpeakingAi, setIsSpeakingAi] = useState(false);
@@ -226,7 +232,7 @@ export default function TechnicalOralRound() {
         if (!isMounted) return;
 
         setSession(response.data);
-        setMaxQuestions(response.data.maxQuestions || 5);
+        setMaxQuestions(response.data.maxQuestions || 10);
 
         if (response.data.status === "Completed" || response.data.isFinished) {
           setIsFinished(true);
@@ -443,7 +449,7 @@ export default function TechnicalOralRound() {
       window.speechSynthesis.cancel();
     }
 
-    const fullSpokenAnswer = `${spokenTranscript} ${interimText}`.trim();
+    const fullSpokenAnswer = (manualAnswer.trim() || `${spokenTranscript} ${interimText}`.trim());
 
     try {
       if (isDemoMode) {
@@ -505,6 +511,7 @@ export default function TechnicalOralRound() {
         committedTranscriptRef.current = "";
         latestFullTranscriptRef.current = "";
         setSpokenTranscript("");
+        setManualAnswer("");
         setInterimText("");
         setTimeLeft(QUESTION_TIME_LIMIT);
         speakQuestion(nextQuestion.question);
@@ -528,6 +535,7 @@ export default function TechnicalOralRound() {
         committedTranscriptRef.current = "";
         latestFullTranscriptRef.current = "";
         setSpokenTranscript("");
+        setManualAnswer("");
         setInterimText("");
         setTimeLeft(QUESTION_TIME_LIMIT);
         speakQuestion(data.nextQuestion.question);
@@ -921,16 +929,14 @@ export default function TechnicalOralRound() {
                 </p>
               )}
 
-              {/* Fallback Textarea if Speech API is not supported in the browser */}
-              {!speechApiSupported ? (
-                <textarea
-                  value={spokenTranscript}
-                  onChange={(e) => setSpokenTranscript(e.target.value)}
-                  placeholder="Type your technical answer here..."
-                  className="mt-3 w-full rounded-xl border border-slate-300 dark:border-white/10 bg-transparent p-3 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-                  rows={4}
-                />
-              ) : null}
+              <textarea
+                value={manualAnswer}
+                onChange={(e) => setManualAnswer(e.target.value)}
+                placeholder="Type your answer here if speech recognition misses anything..."
+                aria-label="Your answer"
+                className="mt-3 w-full rounded-xl border border-slate-300 dark:border-white/10 bg-transparent p-3 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                rows={4}
+              />
             </div>
 
             {micError ? (

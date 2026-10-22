@@ -28,6 +28,8 @@ const studentSchema = new mongoose.Schema(
     score: { type: Number, default: null },
     aptitudeScore: { type: Number, default: null },
     technicalOralScore: { type: Number, default: null },
+    hrScore: { type: Number, default: null },
+    hrAnswers: { type: mongoose.Schema.Types.Mixed, default: {} },
     technicalOralStatus: {
       type: String,
       enum: ["Not Started", "In Progress", "Completed", "Exempt"],

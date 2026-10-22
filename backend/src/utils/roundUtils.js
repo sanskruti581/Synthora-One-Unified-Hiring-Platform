@@ -99,7 +99,8 @@ export function getCurrentRound(drive, student) {
     const isCompleted = result?.status === "Completed" || (
       round === "Aptitude" ? (student.aptitudeScore !== null && student.aptitudeScore !== undefined) :
       round === "Coding" ? (student.codingScore !== null && student.codingScore !== undefined) :
-      round === "Technical Oral" ? (student.technicalOralStatus === "Completed") : false
+      round === "Technical Oral" ? (student.technicalOralStatus === "Completed") :
+      round === "HR" ? (student.hrScore !== null && student.hrScore !== undefined) : false
     );
 
     if (!isCompleted) return round;
@@ -124,7 +125,8 @@ export function calculateOverallScore(drive, student) {
     const scoreVal = result?.score ?? (
       round === "Aptitude" ? (student.aptitudeScore ?? student.score) :
       round === "Coding" ? student.codingScore :
-      round === "Technical Oral" ? student.technicalOralScore : null
+      round === "Technical Oral" ? student.technicalOralScore :
+      round === "HR" ? student.hrScore : null
     );
 
     if (scoreVal === null || scoreVal === undefined) continue;

@@ -50,11 +50,14 @@ export default function StudentDashboard() {
     !isTechnicalCompleted &&
     !isTechnicalExpired &&
     isWithinTechnicalWindow;
+  const hasHRRound = Boolean(assessment?.rounds?.includes("HR"));
+  const isHRCompleted = assessment?.roundResults?.some((result) => result.roundName === "HR" && result.status === "Completed") ?? false;
   const isFinalCompleted =
     assessment?.result === "Rejected" ||
     (isCompleted &&
       (!hasCodingRound || isCodingCompleted) &&
-      (!hasTechnicalRound || isTechnicalCompleted));
+      (!hasTechnicalRound || isTechnicalCompleted) &&
+      (!hasHRRound || isHRCompleted));
   const isClosed = isCodingRound
     ? isCodingExpired
     : Boolean(assessment && !isCompleted && now >= new Date(examEndAt).getTime());
@@ -84,6 +87,10 @@ export default function StudentDashboard() {
 
     if (assessment?.currentRound === "Coding" && assessment.driveId) {
       navigate(`/coding/${assessment.driveId}`);
+      return;
+    }
+    if (assessment?.currentRound === "HR") {
+      navigate("/hr");
       return;
     }
 
@@ -252,7 +259,7 @@ export default function StudentDashboard() {
               ) : isCompleted && hasTechnicalRound ? (
                 <p className="mt-2 text-sm font-bold text-sky-700 dark:text-sky-200">
                   {canStartTechnical
-                    ? "Congratulations! You qualified for the Technical Assessment. Click below or check your email to begin."
+                    ? "Congratulations! You qualified for the Technical Assessment. Check your email for your private link to begin."
                     : "Your assessment round is completed."}
                 </p>
               ) : null}
@@ -263,20 +270,17 @@ export default function StudentDashboard() {
               ) : null}
               {message ? <p className="mt-2 text-sm font-semibold text-rose-600">{message}</p> : null}
             </div>
-            {isTechnicalCompleted ? (
+            {assessment?.currentRound === "HR" && hasHRRound && !isHRCompleted ? (
+              <button type="button" onClick={() => navigate("/hr")} className="inline-flex h-12 items-center gap-2 rounded-xl bg-sky-500 px-5 text-sm font-extrabold text-white"><PlayCircle className="h-5 w-5" />Start HR Round</button>
+            ) : isTechnicalCompleted ? (
               <div className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-extrabold text-white">
                 <CheckCircle2 className="h-5 w-5" />
                 Technical Completed
               </div>
             ) : canStartTechnical ? (
-              <button
-                type="button"
-                onClick={handleStart}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-sky-500 px-5 text-sm font-extrabold text-white shadow-lg shadow-sky-500/20 transition hover:-translate-y-0.5 hover:bg-sky-600"
-              >
-                <PlayCircle className="h-5 w-5" />
-                Start Technical Assessment
-              </button>
+              <div className="inline-flex h-12 items-center gap-2 rounded-xl border border-sky-500/20 bg-sky-500/10 px-5 text-sm font-bold text-sky-700 dark:text-sky-200">
+                Check your email for the private technical round link
+              </div>
             ) : canStartCoding ? (
               <button
                 type="button"

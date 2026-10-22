@@ -129,6 +129,20 @@ export async function generateOralQuestion({
   previousTurns = [],
 }) {
   const category = getQuestionCategory(questionNumber);
+  const questionBank = [
+    "What is the difference between a variable and a constant in your primary programming language?",
+    "How do arrays and linked lists differ in memory use and common operations?",
+    "What is the time complexity of binary search, and what condition must its input satisfy?",
+    "Explain the difference between a process and a thread.",
+    "What is an API, and how does an HTTP request and response work?",
+    "How would you validate and safely store a user's password?",
+    "What is the difference between SQL and NoSQL databases, and when might you choose each?",
+    "How would you investigate an endpoint that became slow after a release?",
+    "What causes a race condition, and how can you prevent one in a web application?",
+    "Describe a system you built and explain one technical tradeoff you made."
+  ];
+  const question = questionBank[Math.min(Math.max(questionNumber - 1, 0), questionBank.length - 1)];
+  return { category, question };
   const groq = getGroqClient();
 
   if (!groq) {
@@ -147,7 +161,7 @@ export async function generateOralQuestion({
     )
     .join("\n\n");
 
-  const prompt = `You are Synthora AI, an expert, objective technical viva interviewer conducting a 5-question spoken technical oral exam for the role: "${jobRole}".
+  const prompt = `You are Synthora AI, an expert, objective technical viva interviewer conducting a 10-question spoken technical oral exam for the role: "${jobRole}".
 Hiring drive context: ${jobDescription || "No additional job description text was provided."}
 
 Interview progression guideline:
@@ -157,7 +171,7 @@ Interview progression guideline:
 - Question 4: Scenario / problem-solving / debugging challenge
 - Question 5: Adaptive follow-up (dig into any weak, incomplete, or interesting point from previous turns)
 
-Current Question Number: ${questionNumber} of 5.
+Current Question Number: ${questionNumber} of 10.
 Assigned Category: ${category}.
 
 ${turnsContext ? `Previous Conversation History:\n${turnsContext}\n` : "This is the very first question of the oral interview."}

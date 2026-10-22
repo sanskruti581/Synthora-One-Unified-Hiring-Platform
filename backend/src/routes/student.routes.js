@@ -9,7 +9,7 @@ import jwt from "jsonwebtoken";
 import { getExamStartDate, getExamEndDate } from "../utils/tokens.js";
 import TechnicalOralInterview from "../models/TechnicalOralInterview.js";
 import { generateOralQuestion, evaluateSpokenAnswer, generateFinalOralSummary } from "../services/aiService.js";
-import { getTechnicalAssessmentState, promoteStudentToTechnicalAssessment } from "../utils/technicalAssessment.js";
+import { getTechnicalAssessmentState } from "../utils/technicalAssessment.js";
 import { sendAptitudeClearedEmail } from "../utils/mailer.js";
 import { getNextRound, normalizeRoundName, calculateOverallScore, determineFinalResult, canAccessRound, getDriveRounds } from "../utils/roundUtils.js";
 
@@ -47,6 +47,26 @@ const DEMO_APTITUDE_QUESTIONS = [
     correctAnswer: "Productive",
     category: "Verbal",
   },
+  { question: "What is 15% of 200?", options: ["20", "25", "30", "35"], correctAnswer: "30", category: "Quantitative" },
+  { question: "A product costs 800 after a 20% discount. What was its original price?", options: ["900", "960", "1000", "1200"], correctAnswer: "1000", category: "Quantitative" },
+  { question: "What is the median of 3, 7, 9, 12, 20?", options: ["7", "9", "10", "12"], correctAnswer: "9", category: "Quantitative" },
+  { question: "If 5 pens cost 60, how much do 8 pens cost at the same rate?", options: ["84", "90", "96", "100"], correctAnswer: "96", category: "Quantitative" },
+  { question: "A car travels 150 km in 2.5 hours. What is its average speed?", options: ["50 km/h", "60 km/h", "65 km/h", "75 km/h"], correctAnswer: "60 km/h", category: "Quantitative" },
+  { question: "What is the next number: 3, 6, 12, 24, ?", options: ["36", "42", "48", "52"], correctAnswer: "48", category: "Logical Reasoning" },
+  { question: "Find the odd one out: 16, 25, 36, 48, 64", options: ["16", "25", "48", "64"], correctAnswer: "48", category: "Logical Reasoning" },
+  { question: "If all Bloops are Razzies and all Razzies are Lazzies, which is true?", options: ["All Lazzies are Bloops", "All Bloops are Lazzies", "No Bloops are Lazzies", "Some Razzies are not Lazzies"], correctAnswer: "All Bloops are Lazzies", category: "Logical Reasoning" },
+  { question: "Complete the sequence: A, C, F, J, O, ?", options: ["S", "T", "U", "V"], correctAnswer: "U", category: "Logical Reasoning" },
+  { question: "A is taller than B; B is taller than C. Who is shortest?", options: ["A", "B", "C", "Cannot tell"], correctAnswer: "C", category: "Logical Reasoning" },
+  { question: "What is the probability of getting heads on a fair coin toss?", options: ["1/4", "1/3", "1/2", "1"], correctAnswer: "1/2", category: "Quantitative" },
+  { question: "What is the simple interest on 1000 at 5% per year for 2 years?", options: ["50", "100", "150", "200"], correctAnswer: "100", category: "Quantitative" },
+  { question: "A team completes 3/5 of a task. What percentage remains?", options: ["20%", "30%", "40%", "60%"], correctAnswer: "40%", category: "Quantitative" },
+  { question: "Which is the largest fraction?", options: ["2/3", "3/5", "5/8", "7/12"], correctAnswer: "2/3", category: "Quantitative" },
+  { question: "If x + 7 = 19, what is x?", options: ["10", "11", "12", "13"], correctAnswer: "12", category: "Quantitative" },
+  { question: "Choose the word closest in meaning to concise.", options: ["Brief", "Unclear", "Detailed", "Informal"], correctAnswer: "Brief", category: "Verbal" },
+  { question: "Choose the opposite of expand.", options: ["Increase", "Extend", "Contract", "Enlarge"], correctAnswer: "Contract", category: "Verbal" },
+  { question: "Book is to reading as fork is to:", options: ["Drawing", "Eating", "Writing", "Cutting"], correctAnswer: "Eating", category: "Verbal" },
+  { question: "Which sentence is grammatically correct?", options: ["She go to work daily.", "She goes to work daily.", "She going to work daily.", "She gone to work daily."], correctAnswer: "She goes to work daily.", category: "Verbal" },
+  { question: "If today is Wednesday, what day will it be in 10 days?", options: ["Friday", "Saturday", "Sunday", "Monday"], correctAnswer: "Saturday", category: "Logical Reasoning" }
 ];
 
 async function getInvitationPayload(token) {
@@ -223,6 +243,7 @@ async function completeOralInterview({ interview, studentId }) {
   student.technicalOralStatus = "Completed";
   student.technicalAssessmentStatus = "Completed";
   student.technicalOralInterview = interview._id;
+  student.currentRound = isOralPassed ? (getNextRound(drive, "Technical Oral") || "Technical Oral") : "Technical Oral";
   student.assessmentStatus = "Completed";
   student.completedAt = completedAt;
 
@@ -246,6 +267,7 @@ async function completeOralInterview({ interview, studentId }) {
       technicalOralScore: interview.overallScore,
       technicalOralStatus: "Completed",
       technicalAssessmentStatus: "Completed",
+      currentRound: student.currentRound,
       assessmentStatus: "Completed",
       completedAt,
       overallScore: student.overallScore,
@@ -990,7 +1012,7 @@ router.post("/assessment/complete", requireStudent, async (req, res) => {
     // Fallback: if student used old numeric IDs (q1, q2...) accept those too
     if (score === 0 && Object.keys(answers).length > 0) {
       const legacyAnswers = answers;
-      const legacyMap = { q1: 0, q2: 1, q3: 2, q4: 3, q5: 4 };
+      const legacyMap = Object.fromEntries(Array.from({ length: DEMO_APTITUDE_QUESTIONS.length }, (_, i) => [`q${i + 1}`, i]));
       let legacyScore = 0;
       let legacyMax = 0;
       for (const [qId, answer] of Object.entries(legacyAnswers)) {
@@ -1071,9 +1093,7 @@ router.post("/assessment/complete", requireStudent, async (req, res) => {
     student.currentRound = nextRound;
     student.result = "Pending";
 
-    if (nextRound === "Technical Oral") {
-      await promoteStudentToTechnicalAssessment({ student, drive, company, invitation });
-    } else if (nextRound === "Coding") {
+    if (nextRound === "Coding") {
       const codingDurationHours = drive.codingWindowDurationHours || 6;
       student.codingStatus = "Active";
       student.codingAccessStartsAt = completedAt;
@@ -1168,19 +1188,11 @@ router.post("/oral/start", requireStudent, async (req, res) => {
     let expiresAt = invitation?.technicalAssessmentAccessExpiresAt || student.technicalAssessmentAccessExpiresAt;
     let technicalState = await syncExpiredTechnicalWindow(student, invitation);
 
-    if (!startsAt || !expiresAt || technicalState === "Not Selected") {
-      if (student.currentRound === "Technical Oral" || canAccessRound(drive, student, "Technical Oral")) {
-        const company = await Company.findById(drive.company);
-        await promoteStudentToTechnicalAssessment({ student, drive, company, invitation });
-        startsAt = student.technicalAssessmentAccessStartsAt;
-        expiresAt = student.technicalAssessmentAccessExpiresAt;
-        technicalState = "Active";
-      } else {
-        return res.status(403).json({
-          message: "You have not been invited to the Technical Assessment yet.",
-          technicalAssessmentStatus: "Not Selected",
-        });
-      }
+    if (!startsAt || !expiresAt || technicalState === "Not Selected" || !invitation?.technicalAssessmentEmailSent) {
+      return res.status(403).json({
+        message: "You have not been invited to the Technical Assessment yet.",
+        technicalAssessmentStatus: "Not Selected",
+      });
     }
 
     const now = new Date();
@@ -1238,7 +1250,7 @@ router.post("/oral/start", requireStudent, async (req, res) => {
       jobRole: drive.jobRole,
       status: "In Progress",
       currentQuestionIndex: 0,
-      maxQuestions: 5,
+      maxQuestions: 10,
       questions: [
         {
           questionNumber: 1,
@@ -1412,6 +1424,60 @@ router.post("/oral/:sessionId/finish", requireStudent, async (req, res) => {
   } catch (error) {
     const statusCode = error.statusCode || 500;
     res.status(statusCode).json({ message: error.message || "Failed to finish oral interview" });
+  }
+});
+
+const HR_QUESTIONS = [
+  "Tell us about yourself and the experiences most relevant to this role.",
+  "What interested you in this position and our organization?",
+  "Describe a challenging situation at work or school and how you handled it.",
+  "How do you respond to constructive feedback or disagreement with a teammate?",
+  "What are your professional goals for the next few years?",
+];
+
+router.get("/hr/questions", requireStudent, async (req, res) => {
+  const student = await Student.findById(req.studentId);
+  const drive = student ? await HiringDrive.findById(student.drive) : null;
+  if (!student || !drive || !getDriveRounds(drive).includes("HR") || !canAccessRound(drive, student, "HR")) {
+    return res.status(403).json({ message: "The HR round is not available yet." });
+  }
+  res.json({ questions: HR_QUESTIONS });
+});
+
+router.post("/hr/submit", requireStudent, async (req, res) => {
+  try {
+    const student = await Student.findById(req.studentId);
+    const drive = student ? await HiringDrive.findById(student.drive) : null;
+    if (!student || !drive || !getDriveRounds(drive).includes("HR") || !canAccessRound(drive, student, "HR")) {
+      return res.status(403).json({ message: "The HR round is not available yet." });
+    }
+    const answers = req.body?.answers && typeof req.body.answers === "object" ? req.body.answers : {};
+    if (HR_QUESTIONS.some((_, i) => !String(answers[i] || "").trim())) {
+      return res.status(400).json({ message: "Please answer all HR questions before submitting." });
+    }
+    const completedAt = new Date();
+    const score = 100;
+    student.hrAnswers = answers;
+    student.hrScore = score;
+    student.roundResults = (student.roundResults || []).filter(r => normalizeRoundName(r.roundName) !== "HR");
+    student.roundResults.push({ roundName: "HR", status: "Completed", score, maxScore: 100, completedAt, submission: answers });
+    student.currentRound = getNextRound(drive, "HR") || "HR";
+    student.result = determineFinalResult(drive, student);
+    if (student.result !== "Pending") {
+      student.assessmentStatus = "Completed";
+      student.completedAt = completedAt;
+      student.overallScore = calculateOverallScore(drive, student);
+    }
+    await student.save();
+    const invitation = await Invitation.findOne({ student: student._id, drive: drive._id });
+    if (invitation) {
+      invitation.currentRound = student.currentRound;
+      invitation.result = student.result;
+      await invitation.save();
+    }
+    res.json({ message: "HR round submitted successfully.", score, result: student.result });
+  } catch (error) {
+    res.status(500).json({ message: error.message || "HR round submission failed." });
   }
 });
 

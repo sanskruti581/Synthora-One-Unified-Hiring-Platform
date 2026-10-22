@@ -5,7 +5,6 @@ import CodingQuestion from "../models/CodingQuestion.js";
 import HiringDrive from "../models/HiringDrive.js";
 import Student from "../models/Student.js";
 import Invitation from "../models/Invitation.js";
-import Company from "../models/Company.js";
 import { executeCode } from "../utils/codeExecutor.js";
 import {
   getNextRound,
@@ -14,7 +13,6 @@ import {
   determineFinalResult,
   canAccessRound,
 } from "../utils/roundUtils.js";
-import { promoteStudentToTechnicalAssessment } from "../utils/technicalAssessment.js";
 
 const router = Router();
 
@@ -311,17 +309,7 @@ router.post("/submit", requireStudent, async (req, res) => {
       student.currentRound = nextRound;
       student.result = "Pending";
 
-      if (nextRound === "Technical Oral") {
-        const company = await Company.findById(drive.company);
-        const invitation = await Invitation.findOne({ student: student._id, drive: drive._id });
-        await promoteStudentToTechnicalAssessment({
-          student,
-          drive,
-          company,
-          invitation,
-          codingScore: totalScore
-        });
-      }
+
     } else {
       student.assessmentStatus = "Completed";
       student.completedAt = new Date();
